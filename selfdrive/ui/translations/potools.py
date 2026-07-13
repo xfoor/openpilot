@@ -283,6 +283,7 @@ PLURAL_FORMS: dict[str, str] = {
   'fr': 'nplurals=2; plural=(n > 1);',
   'es': 'nplurals=2; plural=(n != 1);',
   'pt-BR': 'nplurals=2; plural=(n > 1);',
+  'it': 'nplurals=2; plural=(n != 1);',
   'tr': 'nplurals=2; plural=(n != 1);',
   'uk': 'nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);',
   'th': 'nplurals=1; plural=0;',
