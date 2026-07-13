@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from openpilot.selfdrive.ui.translations.potools import parse_po
-from openpilot.system.ui.lib.multilang import LANGUAGES_FILE, TRANSLATIONS_DIR
+from openpilot.system.ui.lib.multilang import LANGUAGES_FILE, PLURAL_SELECTORS, TRANSLATIONS_DIR
 
 PERCENT_PLACEHOLDER_RE = re.compile(r"%(?:n|\d+)")
 BAD_ENTITY_RE = re.compile(r'@(\w+);')
@@ -50,6 +50,22 @@ def load_po_text(po_path: Path) -> str:
 def test_translation_file_exists(language_code: str):
   po_path = PO_DIR / f"app_{language_code}.po"
   assert po_path.exists(), f"missing translation file: {po_path}"
+
+
+def test_italian_translation_is_complete():
+  _, entries = parse_po(PO_DIR / "app_it.po")
+
+  for entry in entries:
+    if entry.is_plural:
+      assert entry.msgstr_plural
+      assert all(entry.msgstr_plural.values()), f"missing Italian plural translation: {entry.msgid!r}"
+    else:
+      assert entry.msgstr, f"missing Italian translation: {entry.msgid!r}"
+
+
+@pytest.mark.parametrize(("count", "expected_form"), [(0, 1), (1, 0), (2, 1)])
+def test_italian_plural_selection(count: int, expected_form: int):
+  assert PLURAL_SELECTORS["it"](count) == expected_form
 
 
 @pytest.mark.parametrize("po_path", sorted(PO_DIR.glob("app_*.po")), ids=lambda p: p.name)
