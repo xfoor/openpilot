@@ -46,6 +46,13 @@ sound_list: dict[int, tuple[str, int | None, float]] = {
   AudibleAlert.warningSoft: ("warning_soft.wav", None, MAX_VOLUME),
   AudibleAlert.warningImmediate: ("warning_immediate.wav", None, MAX_VOLUME),
 }
+
+observer_sound_list: dict[int, str] = {
+  1: "observer_attention_it.wav",
+  2: "observer_lead_departed_it.wav",
+  3: "observer_slowing_traffic_it.wav",
+}
+
 if HARDWARE.get_device_type() == "tizi":
   sound_list.update({
     AudibleAlert.engage: ("engage_tizi.wav", 1, MAX_VOLUME),
@@ -69,6 +76,8 @@ class Soundd:
     self.current_alert = AudibleAlert.none
     self.current_volume = MIN_VOLUME
     self.current_sound_frame = 0
+    self.current_observer_prompt = 0
+    self.current_observer_sound_frame = 0
 
     self.ramp_start_volume = MIN_VOLUME
     self.ramp_start_time = 0.
@@ -79,18 +88,25 @@ class Soundd:
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
+    self.loaded_observer_sounds: dict[int, np.ndarray] = {}
 
     # Load all sounds
     for sound in sound_list:
       filename, play_count, volume = sound_list[sound]
+      self.loaded_sounds[sound] = self.load_sound(filename)
 
-      with wave.open(BASEDIR + "/selfdrive/assets/sounds/" + filename, 'r') as wavefile:
-        assert wavefile.getnchannels() == 1
-        assert wavefile.getsampwidth() == 2
-        assert wavefile.getframerate() == SAMPLE_RATE
+    for prompt, filename in observer_sound_list.items():
+      self.loaded_observer_sounds[prompt] = self.load_sound(filename)
 
-        length = wavefile.getnframes()
-        self.loaded_sounds[sound] = np.frombuffer(wavefile.readframes(length), dtype=np.int16).astype(np.float32) / (2**16/2)
+  @staticmethod
+  def load_sound(filename: str) -> np.ndarray:
+    with wave.open(BASEDIR + "/selfdrive/assets/sounds/" + filename, 'r') as wavefile:
+      assert wavefile.getnchannels() == 1
+      assert wavefile.getsampwidth() == 2
+      assert wavefile.getframerate() == SAMPLE_RATE
+
+      length = wavefile.getnframes()
+      return np.frombuffer(wavefile.readframes(length), dtype=np.int16).astype(np.float32) / (2**16/2)
 
   def get_sound_data(self, frames): # get "frames" worth of data from the current alert sound, looping when required
 
@@ -110,6 +126,18 @@ class Soundd:
         ret[written_frames:written_frames+frames_to_write] = sound_data[current_sound_frame:current_sound_frame+frames_to_write]
         written_frames += frames_to_write
         self.current_sound_frame += frames_to_write
+    elif self.current_observer_prompt:
+      sound_data = self.loaded_observer_sounds[self.current_observer_prompt]
+      available_frames = sound_data.shape[0] - self.current_observer_sound_frame
+      frames_to_write = min(available_frames, frames)
+      if frames_to_write > 0:
+        start = self.current_observer_sound_frame
+        ret[:frames_to_write] = sound_data[start:start + frames_to_write]
+        self.current_observer_sound_frame += frames_to_write
+
+      if self.current_observer_sound_frame >= sound_data.shape[0]:
+        self.current_observer_prompt = 0
+        self.current_observer_sound_frame = 0
 
     return ret * self.current_volume
 
@@ -124,8 +152,16 @@ class Soundd:
       if new_alert == AudibleAlert.warningImmediate:
         self.ramp_start_volume = self.current_volume
         self.ramp_start_time = time.monotonic()
+      if new_alert != AudibleAlert.none:
+        self.current_observer_prompt = 0
+        self.current_observer_sound_frame = 0
       self.current_alert = new_alert
       self.current_sound_frame = 0
+
+  def update_observer_prompt(self, prompt):
+    if prompt and self.current_alert == AudibleAlert.none:
+      self.current_observer_prompt = prompt
+      self.current_observer_sound_frame = 0
 
   def get_audible_alert(self, sm):
     if sm.updated['selfdriveState']:
@@ -137,6 +173,9 @@ class Soundd:
     elif self.selfdrive_timeout_alert:
       self.update_alert(AudibleAlert.none)
       self.selfdrive_timeout_alert = False
+
+    if sm.updated['roadObserverState']:
+      self.update_observer_prompt(sm['roadObserverState'].prompt.raw)
 
   def calculate_volume(self, weighted_db):
     volume = ((weighted_db - AMBIENT_DB) / DB_SCALE) * (MAX_VOLUME - MIN_VOLUME) + MIN_VOLUME
@@ -153,7 +192,7 @@ class Soundd:
     # sounddevice must be imported after forking processes
     import sounddevice as sd
 
-    sm = messaging.SubMaster(['selfdriveState', 'soundPressure'])
+    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'roadObserverState'])
 
     with self.get_stream(sd) as stream:
       rk = Ratekeeper(20)

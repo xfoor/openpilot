@@ -1,9 +1,11 @@
+import time
+
+import numpy as np
+
 from cereal import car
 from cereal import messaging
 from cereal.messaging import SubMaster, PubMaster
-from openpilot.selfdrive.ui.soundd import SELFDRIVE_STATE_TIMEOUT, check_selfdrive_timeout_alert
-
-import time
+from openpilot.selfdrive.ui.soundd import SELFDRIVE_STATE_TIMEOUT, Soundd, check_selfdrive_timeout_alert
 
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 
@@ -31,5 +33,35 @@ class TestSoundd:
 
     assert check_selfdrive_timeout_alert(sm)
 
-  # TODO: add test with micd for checking that soundd actually outputs sounds
+  def test_stock_alert_interrupts_observer_prompt(self):
+    soundd = Soundd.__new__(Soundd)
+    soundd.current_alert = AudibleAlert.none
+    soundd.current_sound_frame = 0
+    soundd.current_observer_prompt = 1
+    soundd.current_observer_sound_frame = 0
+    soundd.current_volume = 1.0
+    soundd.ramp_start_volume = 0.1
+    soundd.ramp_start_time = 0.0
+    soundd.loaded_sounds = {AudibleAlert.warningImmediate: np.ones(8, dtype=np.float32)}
+    soundd.loaded_observer_sounds = {1: np.full(8, 0.5, dtype=np.float32)}
 
+    soundd.update_alert(AudibleAlert.warningImmediate)
+
+    assert soundd.current_observer_prompt == 0
+    assert np.all(soundd.get_sound_data(4) == 1.0)
+
+  def test_observer_prompt_plays_once(self):
+    soundd = Soundd.__new__(Soundd)
+    soundd.current_alert = AudibleAlert.none
+    soundd.current_sound_frame = 0
+    soundd.current_observer_prompt = 1
+    soundd.current_observer_sound_frame = 0
+    soundd.current_volume = 1.0
+    soundd.loaded_sounds = {}
+    soundd.loaded_observer_sounds = {1: np.full(4, 0.5, dtype=np.float32)}
+
+    assert np.all(soundd.get_sound_data(4) == 0.5)
+    assert soundd.current_observer_prompt == 0
+    assert np.all(soundd.get_sound_data(4) == 0.0)
+
+  # TODO: add test with micd for checking that soundd actually outputs sounds

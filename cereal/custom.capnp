@@ -10,7 +10,16 @@ $Cxx.namespace("cereal");
 # DO rename the structs
 # DON'T change the identifier (e.g. @0x81c2f05a394cf4af)
 
-struct CustomReserved0 @0x81c2f05a394cf4af {
+struct RoadObserverState @0x81c2f05a394cf4af {
+  prompt @0 :Prompt;
+  confidence @1 :Float32;
+
+  enum Prompt {
+    none @0;
+    attention @1;
+    leadDeparted @2;
+    slowingTraffic @3;
+  }
 }
 
 struct CustomReserved1 @0xaedffd8f31e7b55d {

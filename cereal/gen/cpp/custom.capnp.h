@@ -19,6 +19,14 @@ namespace capnp {
 namespace schemas {
 
 CAPNP_DECLARE_SCHEMA(81c2f05a394cf4af);
+CAPNP_DECLARE_SCHEMA(964679497a159052);
+enum class Prompt_964679497a159052: uint16_t {
+  NONE,
+  ATTENTION,
+  LEAD_DEPARTED,
+  SLOWING_TRAFFIC,
+};
+CAPNP_DECLARE_ENUM(Prompt, 964679497a159052);
 CAPNP_DECLARE_SCHEMA(aedffd8f31e7b55d);
 CAPNP_DECLARE_SCHEMA(f35cc4560bbf6ec2);
 CAPNP_DECLARE_SCHEMA(da96579883444c35);
@@ -44,15 +52,17 @@ CAPNP_DECLARE_SCHEMA(a4f1eb3323f5f582);
 
 namespace cereal {
 
-struct CustomReserved0 {
-  CustomReserved0() = delete;
+struct RoadObserverState {
+  RoadObserverState() = delete;
 
   class Reader;
   class Builder;
   class Pipeline;
+  typedef ::capnp::schemas::Prompt_964679497a159052 Prompt;
+
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(81c2f05a394cf4af, 0, 0)
+    CAPNP_DECLARE_STRUCT_HEADER(81c2f05a394cf4af, 1, 0)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -346,9 +356,9 @@ struct CustomReserved19 {
 
 // =======================================================================================
 
-class CustomReserved0::Reader {
+class RoadObserverState::Reader {
 public:
-  typedef CustomReserved0 Reads;
+  typedef RoadObserverState Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -363,6 +373,10 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+  inline  ::cereal::RoadObserverState::Prompt getPrompt() const;
+
+  inline float getConfidence() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -375,9 +389,9 @@ private:
   friend class ::capnp::Orphanage;
 };
 
-class CustomReserved0::Builder {
+class RoadObserverState::Builder {
 public:
-  typedef CustomReserved0 Builds;
+  typedef RoadObserverState Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
                        // You can explicitly initialize to nullptr instead.
@@ -391,6 +405,12 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
+  inline  ::cereal::RoadObserverState::Prompt getPrompt();
+  inline void setPrompt( ::cereal::RoadObserverState::Prompt value);
+
+  inline float getConfidence();
+  inline void setConfidence(float value);
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
@@ -401,9 +421,9 @@ private:
 };
 
 #if !CAPNP_LITE
-class CustomReserved0::Pipeline {
+class RoadObserverState::Pipeline {
 public:
-  typedef CustomReserved0 Pipelines;
+  typedef RoadObserverState Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -1767,6 +1787,34 @@ private:
 #endif  // !CAPNP_LITE
 
 // =======================================================================================
+
+inline  ::cereal::RoadObserverState::Prompt RoadObserverState::Reader::getPrompt() const {
+  return _reader.getDataField< ::cereal::RoadObserverState::Prompt>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::cereal::RoadObserverState::Prompt RoadObserverState::Builder::getPrompt() {
+  return _builder.getDataField< ::cereal::RoadObserverState::Prompt>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void RoadObserverState::Builder::setPrompt( ::cereal::RoadObserverState::Prompt value) {
+  _builder.setDataField< ::cereal::RoadObserverState::Prompt>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline float RoadObserverState::Reader::getConfidence() const {
+  return _reader.getDataField<float>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+
+inline float RoadObserverState::Builder::getConfidence() {
+  return _builder.getDataField<float>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+inline void RoadObserverState::Builder::setConfidence(float value) {
+  _builder.setDataField<float>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+}
 
 }  // namespace
 

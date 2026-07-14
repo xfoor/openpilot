@@ -3176,7 +3176,7 @@ struct Event {
     NAV_MODEL_D_E_P_R_E_C_A_T_E_D,
     MAP_RENDER_STATE_D_E_P_R_E_C_A_T_E_D,
     UI_PLAN_D_E_P_R_E_C_A_T_E_D,
-    CUSTOM_RESERVED0,
+    ROAD_OBSERVER_STATE,
     CUSTOM_RESERVED1,
     CUSTOM_RESERVED2,
     CUSTOM_RESERVED3,
@@ -22482,9 +22482,9 @@ public:
   inline bool hasUiPlanDEPRECATED() const;
   inline  ::cereal::UiPlan::Reader getUiPlanDEPRECATED() const;
 
-  inline bool isCustomReserved0() const;
-  inline bool hasCustomReserved0() const;
-  inline  ::cereal::CustomReserved0::Reader getCustomReserved0() const;
+  inline bool isRoadObserverState() const;
+  inline bool hasRoadObserverState() const;
+  inline  ::cereal::RoadObserverState::Reader getRoadObserverState() const;
 
   inline bool isCustomReserved1() const;
   inline bool hasCustomReserved1() const;
@@ -23537,13 +23537,13 @@ public:
   inline void adoptUiPlanDEPRECATED(::capnp::Orphan< ::cereal::UiPlan>&& value);
   inline ::capnp::Orphan< ::cereal::UiPlan> disownUiPlanDEPRECATED();
 
-  inline bool isCustomReserved0();
-  inline bool hasCustomReserved0();
-  inline  ::cereal::CustomReserved0::Builder getCustomReserved0();
-  inline void setCustomReserved0( ::cereal::CustomReserved0::Reader value);
-  inline  ::cereal::CustomReserved0::Builder initCustomReserved0();
-  inline void adoptCustomReserved0(::capnp::Orphan< ::cereal::CustomReserved0>&& value);
-  inline ::capnp::Orphan< ::cereal::CustomReserved0> disownCustomReserved0();
+  inline bool isRoadObserverState();
+  inline bool hasRoadObserverState();
+  inline  ::cereal::RoadObserverState::Builder getRoadObserverState();
+  inline void setRoadObserverState( ::cereal::RoadObserverState::Reader value);
+  inline  ::cereal::RoadObserverState::Builder initRoadObserverState();
+  inline void adoptRoadObserverState(::capnp::Orphan< ::cereal::RoadObserverState>&& value);
+  inline ::capnp::Orphan< ::cereal::RoadObserverState> disownRoadObserverState();
 
   inline bool isCustomReserved1();
   inline bool hasCustomReserved1();
@@ -55999,57 +55999,57 @@ inline ::capnp::Orphan< ::cereal::UiPlan> Event::Builder::disownUiPlanDEPRECATED
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool Event::Reader::isCustomReserved0() const {
-  return which() == Event::CUSTOM_RESERVED0;
+inline bool Event::Reader::isRoadObserverState() const {
+  return which() == Event::ROAD_OBSERVER_STATE;
 }
-inline bool Event::Builder::isCustomReserved0() {
-  return which() == Event::CUSTOM_RESERVED0;
+inline bool Event::Builder::isRoadObserverState() {
+  return which() == Event::ROAD_OBSERVER_STATE;
 }
-inline bool Event::Reader::hasCustomReserved0() const {
-  if (which() != Event::CUSTOM_RESERVED0) return false;
+inline bool Event::Reader::hasRoadObserverState() const {
+  if (which() != Event::ROAD_OBSERVER_STATE) return false;
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool Event::Builder::hasCustomReserved0() {
-  if (which() != Event::CUSTOM_RESERVED0) return false;
+inline bool Event::Builder::hasRoadObserverState() {
+  if (which() != Event::ROAD_OBSERVER_STATE) return false;
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::cereal::CustomReserved0::Reader Event::Reader::getCustomReserved0() const {
-  KJ_IREQUIRE((which() == Event::CUSTOM_RESERVED0),
+inline  ::cereal::RoadObserverState::Reader Event::Reader::getRoadObserverState() const {
+  KJ_IREQUIRE((which() == Event::ROAD_OBSERVER_STATE),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::cereal::CustomReserved0>::get(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::cereal::RoadObserverState>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::cereal::CustomReserved0::Builder Event::Builder::getCustomReserved0() {
-  KJ_IREQUIRE((which() == Event::CUSTOM_RESERVED0),
+inline  ::cereal::RoadObserverState::Builder Event::Builder::getRoadObserverState() {
+  KJ_IREQUIRE((which() == Event::ROAD_OBSERVER_STATE),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::cereal::CustomReserved0>::get(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::cereal::RoadObserverState>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void Event::Builder::setCustomReserved0( ::cereal::CustomReserved0::Reader value) {
+inline void Event::Builder::setRoadObserverState( ::cereal::RoadObserverState::Reader value) {
   _builder.setDataField<Event::Which>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS, Event::CUSTOM_RESERVED0);
-  ::capnp::_::PointerHelpers< ::cereal::CustomReserved0>::set(_builder.getPointerField(
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS, Event::ROAD_OBSERVER_STATE);
+  ::capnp::_::PointerHelpers< ::cereal::RoadObserverState>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::cereal::CustomReserved0::Builder Event::Builder::initCustomReserved0() {
+inline  ::cereal::RoadObserverState::Builder Event::Builder::initRoadObserverState() {
   _builder.setDataField<Event::Which>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS, Event::CUSTOM_RESERVED0);
-  return ::capnp::_::PointerHelpers< ::cereal::CustomReserved0>::init(_builder.getPointerField(
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS, Event::ROAD_OBSERVER_STATE);
+  return ::capnp::_::PointerHelpers< ::cereal::RoadObserverState>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void Event::Builder::adoptCustomReserved0(
-    ::capnp::Orphan< ::cereal::CustomReserved0>&& value) {
+inline void Event::Builder::adoptRoadObserverState(
+    ::capnp::Orphan< ::cereal::RoadObserverState>&& value) {
   _builder.setDataField<Event::Which>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS, Event::CUSTOM_RESERVED0);
-  ::capnp::_::PointerHelpers< ::cereal::CustomReserved0>::adopt(_builder.getPointerField(
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS, Event::ROAD_OBSERVER_STATE);
+  ::capnp::_::PointerHelpers< ::cereal::RoadObserverState>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::cereal::CustomReserved0> Event::Builder::disownCustomReserved0() {
-  KJ_IREQUIRE((which() == Event::CUSTOM_RESERVED0),
+inline ::capnp::Orphan< ::cereal::RoadObserverState> Event::Builder::disownRoadObserverState() {
+  KJ_IREQUIRE((which() == Event::ROAD_OBSERVER_STATE),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::cereal::CustomReserved0>::disown(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::cereal::RoadObserverState>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 

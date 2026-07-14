@@ -822,3 +822,7 @@ msgstr "Il sistema non risponde"
 #: openpilot/selfdrive/ui/onroad/alert_renderer.py
 msgid "Reboot Device"
 msgstr "Riavvia dispositivo"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Italian road observer"
+msgstr "Osservatore stradale italiano"
