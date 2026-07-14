@@ -826,3 +826,11 @@ msgstr "Riavvia dispositivo"
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Italian road observer"
 msgstr "Osservatore stradale italiano"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Road scene detection (beta)"
+msgstr "Rilevamento scena stradale (beta)"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Road hazard voice alerts (beta)"
+msgstr "Avvisi vocali pericoli stradali (beta)"

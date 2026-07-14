@@ -19,6 +19,8 @@ class TogglesLayoutMici(NavScroller):
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
     road_observer_toggle = BigParamControl("Italian road observer", "RoadObserverEnabled")
+    road_perception_toggle = BigParamControl("Road scene detection (beta)", "RoadPerceptionEnabled")
+    road_perception_voice_toggle = BigParamControl("Road hazard voice alerts (beta)", "RoadPerceptionVoiceEnabled")
     record_front = BigParamControl("record & upload driver camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
@@ -30,6 +32,8 @@ class TogglesLayoutMici(NavScroller):
       ldw_toggle,
       always_on_dm_toggle,
       road_observer_toggle,
+      road_perception_toggle,
+      road_perception_voice_toggle,
       record_front,
       record_mic,
       enable_openpilot,
@@ -42,6 +46,8 @@ class TogglesLayoutMici(NavScroller):
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
       ("RoadObserverEnabled", road_observer_toggle),
+      ("RoadPerceptionEnabled", road_perception_toggle),
+      ("RoadPerceptionVoiceEnabled", road_perception_voice_toggle),
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),

@@ -5,7 +5,7 @@ import numpy as np
 from cereal import car
 from cereal import messaging
 from cereal.messaging import SubMaster, PubMaster
-from openpilot.selfdrive.ui.soundd import SELFDRIVE_STATE_TIMEOUT, Soundd, check_selfdrive_timeout_alert
+from openpilot.selfdrive.ui.soundd import SELFDRIVE_STATE_TIMEOUT, Soundd, check_selfdrive_timeout_alert, get_perception_prompt
 
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 
@@ -63,5 +63,11 @@ class TestSoundd:
     assert np.all(soundd.get_sound_data(4) == 0.5)
     assert soundd.current_observer_prompt == 0
     assert np.all(soundd.get_sound_data(4) == 0.0)
+
+  def test_perception_prompt_requires_voice_flag(self):
+    assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":false}') == 0
+    assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":true}') == 4
+    assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":true}') == 8
+    assert get_perception_prompt(b'not-json') == 0
 
   # TODO: add test with micd for checking that soundd actually outputs sounds

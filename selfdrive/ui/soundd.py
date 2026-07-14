@@ -10,6 +10,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.road_observer.perception import get_perception_prompt
 
 from openpilot.system import micd
 from openpilot.system.hardware import HARDWARE
@@ -51,6 +52,11 @@ observer_sound_list: dict[int, str] = {
   1: "observer_attention_it.wav",
   2: "observer_lead_departed_it.wav",
   3: "observer_slowing_traffic_it.wav",
+  4: "observer_pedestrian_it.wav",
+  5: "observer_cyclist_it.wav",
+  6: "observer_light_red_it.wav",
+  7: "observer_light_yellow_it.wav",
+  8: "observer_light_green_it.wav",
 }
 
 if HARDWARE.get_device_type() == "tizi":
@@ -176,6 +182,8 @@ class Soundd:
 
     if sm.updated['roadObserverState']:
       self.update_observer_prompt(sm['roadObserverState'].prompt.raw)
+    if sm.updated['customReservedRawData0']:
+      self.update_observer_prompt(get_perception_prompt(sm['customReservedRawData0']))
 
   def calculate_volume(self, weighted_db):
     volume = ((weighted_db - AMBIENT_DB) / DB_SCALE) * (MAX_VOLUME - MIN_VOLUME) + MIN_VOLUME
@@ -192,7 +200,7 @@ class Soundd:
     # sounddevice must be imported after forking processes
     import sounddevice as sd
 
-    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'roadObserverState'])
+    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'roadObserverState', 'customReservedRawData0'])
 
     with self.get_stream(sd) as stream:
       rk = Ratekeeper(20)
