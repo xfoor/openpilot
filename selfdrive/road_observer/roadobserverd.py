@@ -16,6 +16,13 @@ class Prompt(enum.IntEnum):
   SLOWING_TRAFFIC = 3
 
 
+PROMPT_PARAM = {
+  Prompt.ATTENTION: "RoadObserverAttentionEnabled",
+  Prompt.LEAD_DEPARTED: "RoadObserverLeadEnabled",
+  Prompt.SLOWING_TRAFFIC: "RoadObserverSlowingTrafficEnabled",
+}
+
+
 @dataclass
 class ObserverInput:
   now: float
@@ -131,6 +138,8 @@ def main() -> None:
         driver_awareness_percent=sm["driverMonitoringState"].visionPolicyState.awarenessPercent,
       )
       prompt, confidence = observer.update(state)
+      if prompt != Prompt.NONE and not params.get_bool(PROMPT_PARAM[prompt]):
+        prompt, confidence = Prompt.NONE, 0.0
 
     msg = messaging.new_message("roadObserverState")
     msg.valid = sm.all_checks()

@@ -4,6 +4,7 @@ from openpilot.selfdrive.road_observer.perception import (
   COCO_PERSON,
   COCO_TRAFFIC_LIGHT,
   Detection,
+  PERCEPTION_EVENT_PARAM,
   SceneEvent,
   SceneInterpreter,
   classify_traffic_light,
@@ -92,3 +93,8 @@ def test_perception_prompt_parser():
   assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":true}') == 4
   assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":false}') == 0
   assert get_perception_prompt(b'not-json') == 0
+
+
+def test_every_spoken_perception_event_has_a_setting():
+  spoken_events = set(SceneEvent) - {SceneEvent.NONE}
+  assert set(PERCEPTION_EVENT_PARAM) == spoken_events

@@ -11,6 +11,7 @@ from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.road_observer.perception import (
   MODEL_SIZE,
+  PERCEPTION_EVENT_PARAM,
   SceneEvent,
   SceneInterpreter,
   decode_yolox,
@@ -97,6 +98,12 @@ def main() -> None:
       detections = decode_yolox(detector.infer(model_input))
       observation = interpreter.update(detections, image_bgr, sm["carState"].vEgo, now)
       execution_time = time.perf_counter() - started
+      event_param = PERCEPTION_EVENT_PARAM.get(observation.event)
+      voice_enabled = (
+        params.get_bool("RoadPerceptionVoiceEnabled")
+        and event_param is not None
+        and params.get_bool(event_param)
+      )
 
       msg = messaging.new_message("customReservedRawData0", valid=True)
       msg.customReservedRawData0 = serialize_observation(
@@ -104,7 +111,7 @@ def main() -> None:
         execution_time,
         observation,
         detections,
-        params.get_bool("RoadPerceptionVoiceEnabled"),
+        voice_enabled,
       )
       pm.send("customReservedRawData0", msg)
     except Exception:

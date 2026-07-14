@@ -40,6 +40,13 @@ shadow-mode observations in `customReservedRawData0`. `Road hazard voice alerts
 (beta)` is disabled by default. Enable voice only after reviewing local drives
 for false positives, thermal load, and model latency.
 
+Settings also provide individual switches for driver-attention, lead-vehicle,
+slowing-traffic, pedestrian, cyclist, and traffic-light announcements. Turning
+off the road-hazard voice master prevents further local perception
+announcements without disabling stock openpilot safety sounds. Turning off
+Italian road observer separately prevents attention, lead, and slowing-traffic
+announcements.
+
 ## Safety boundary
 
 The observer only publishes advisory messages to `soundd`. It never writes CAN,

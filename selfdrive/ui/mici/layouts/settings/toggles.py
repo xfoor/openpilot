@@ -19,8 +19,14 @@ class TogglesLayoutMici(NavScroller):
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
     road_observer_toggle = BigParamControl("Italian road observer", "RoadObserverEnabled")
+    road_observer_attention_toggle = BigParamControl("Driver attention voice alerts", "RoadObserverAttentionEnabled")
+    road_observer_lead_toggle = BigParamControl("Lead vehicle voice alerts", "RoadObserverLeadEnabled")
+    road_observer_slowing_toggle = BigParamControl("Slowing traffic voice alerts", "RoadObserverSlowingTrafficEnabled")
     road_perception_toggle = BigParamControl("Road scene detection (beta)", "RoadPerceptionEnabled")
     road_perception_voice_toggle = BigParamControl("Road hazard voice alerts (beta)", "RoadPerceptionVoiceEnabled")
+    road_perception_pedestrian_toggle = BigParamControl("Pedestrian voice alerts", "RoadPerceptionPedestrianEnabled")
+    road_perception_cyclist_toggle = BigParamControl("Cyclist voice alerts", "RoadPerceptionCyclistEnabled")
+    road_perception_light_toggle = BigParamControl("Traffic-light voice alerts", "RoadPerceptionTrafficLightEnabled")
     record_front = BigParamControl("record & upload driver camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
@@ -32,8 +38,14 @@ class TogglesLayoutMici(NavScroller):
       ldw_toggle,
       always_on_dm_toggle,
       road_observer_toggle,
+      road_observer_attention_toggle,
+      road_observer_lead_toggle,
+      road_observer_slowing_toggle,
       road_perception_toggle,
       road_perception_voice_toggle,
+      road_perception_pedestrian_toggle,
+      road_perception_cyclist_toggle,
+      road_perception_light_toggle,
       record_front,
       record_mic,
       enable_openpilot,
@@ -46,8 +58,14 @@ class TogglesLayoutMici(NavScroller):
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
       ("RoadObserverEnabled", road_observer_toggle),
+      ("RoadObserverAttentionEnabled", road_observer_attention_toggle),
+      ("RoadObserverLeadEnabled", road_observer_lead_toggle),
+      ("RoadObserverSlowingTrafficEnabled", road_observer_slowing_toggle),
       ("RoadPerceptionEnabled", road_perception_toggle),
       ("RoadPerceptionVoiceEnabled", road_perception_voice_toggle),
+      ("RoadPerceptionPedestrianEnabled", road_perception_pedestrian_toggle),
+      ("RoadPerceptionCyclistEnabled", road_perception_cyclist_toggle),
+      ("RoadPerceptionTrafficLightEnabled", road_perception_light_toggle),
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),

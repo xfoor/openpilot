@@ -30,6 +30,14 @@ PERCEPTION_PROMPT_MAP = {
   SceneEvent.TRAFFIC_LIGHT_GREEN.value: 8,
 }
 
+PERCEPTION_EVENT_PARAM = {
+  SceneEvent.PEDESTRIAN_RISK: "RoadPerceptionPedestrianEnabled",
+  SceneEvent.CYCLIST_RISK: "RoadPerceptionCyclistEnabled",
+  SceneEvent.TRAFFIC_LIGHT_RED: "RoadPerceptionTrafficLightEnabled",
+  SceneEvent.TRAFFIC_LIGHT_YELLOW: "RoadPerceptionTrafficLightEnabled",
+  SceneEvent.TRAFFIC_LIGHT_GREEN: "RoadPerceptionTrafficLightEnabled",
+}
+
 
 def get_perception_prompt(raw_data) -> int:
   try:
