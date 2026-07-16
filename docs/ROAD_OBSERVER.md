@@ -35,10 +35,11 @@ Traffic-light color is estimated only inside a confirmed traffic-light crop.
 It does not infer which traffic light legally controls the current lane, so
 these messages are observations, not driving instructions.
 
-`Road scene detection (beta)` is enabled by default and records structured
-shadow-mode observations in `customReservedRawData0`. `Road hazard voice alerts
-(beta)` is disabled by default. Enable voice only after reviewing local drives
-for false positives, thermal load, and model latency.
+`Road scene detection (beta)` and `Road hazard voice alerts (beta)` are disabled
+by default. Enable scene detection while parked for device validation, then
+enable voice only after reviewing local drives for false positives, thermal
+load, and model latency. When enabled, structured shadow-mode observations are
+published in `customReservedRawData0`.
 
 Settings also provide individual switches for driver-attention, lead-vehicle,
 slowing-traffic, pedestrian, cyclist, and traffic-light announcements. Turning
@@ -46,6 +47,24 @@ off the road-hazard voice master prevents further local perception
 announcements without disabling stock openpilot safety sounds. Turning off
 Italian road observer separately prevents attention, lead, and slowing-traffic
 announcements.
+
+## Build and release
+
+This branch changes parameter keys, Cap'n Proto schemas, messaging services,
+and UI code. It must not contain the stock `prebuilt` marker unless all affected
+comma 4 native artifacts have been rebuilt from this exact commit. Without that
+guarantee, `launch_chffrplus.sh` skips the build and can start the modified
+Python and UI code against stale stock binaries.
+
+Before publishing an installer commit:
+
+1. Complete a clean `scons` build in the repository's supported build
+   environment.
+2. Install while parked with a reliable power source and keep SSH available.
+3. Confirm manager, UI, pandad, `roadobserverd`, and
+   `roadperceptionmodeld` remain healthy before driving.
+4. Keep road-perception voice alerts disabled until latency, thermals, and
+   false positives have been reviewed.
 
 ## Safety boundary
 

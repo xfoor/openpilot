@@ -12,10 +12,10 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.road_observer.perception import (
   MODEL_SIZE,
   PERCEPTION_EVENT_PARAM,
-  SceneEvent,
   SceneInterpreter,
   decode_yolox,
   preprocess_nv12,
+  remap_detections,
 )
 
 
@@ -96,6 +96,7 @@ def main() -> None:
       started = time.perf_counter()
       model_input, image_bgr = preprocess_nv12(buf)
       detections = decode_yolox(detector.infer(model_input))
+      detections = remap_detections(detections, image_bgr.shape[1], image_bgr.shape[0])
       observation = interpreter.update(detections, image_bgr, sm["carState"].vEgo, now)
       execution_time = time.perf_counter() - started
       event_param = PERCEPTION_EVENT_PARAM.get(observation.event)

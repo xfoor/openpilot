@@ -3,6 +3,7 @@ from cereal import log
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle
 from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.ui_state import ui_state
 
@@ -18,15 +19,15 @@ class TogglesLayoutMici(NavScroller):
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
-    road_observer_toggle = BigParamControl("Italian road observer", "RoadObserverEnabled")
-    road_observer_attention_toggle = BigParamControl("Driver attention voice alerts", "RoadObserverAttentionEnabled")
-    road_observer_lead_toggle = BigParamControl("Lead vehicle voice alerts", "RoadObserverLeadEnabled")
-    road_observer_slowing_toggle = BigParamControl("Slowing traffic voice alerts", "RoadObserverSlowingTrafficEnabled")
-    road_perception_toggle = BigParamControl("Road scene detection (beta)", "RoadPerceptionEnabled")
-    road_perception_voice_toggle = BigParamControl("Road hazard voice alerts (beta)", "RoadPerceptionVoiceEnabled")
-    road_perception_pedestrian_toggle = BigParamControl("Pedestrian voice alerts", "RoadPerceptionPedestrianEnabled")
-    road_perception_cyclist_toggle = BigParamControl("Cyclist voice alerts", "RoadPerceptionCyclistEnabled")
-    road_perception_light_toggle = BigParamControl("Traffic-light voice alerts", "RoadPerceptionTrafficLightEnabled")
+    road_observer_toggle = BigParamControl(tr("Italian road observer"), "RoadObserverEnabled")
+    road_observer_attention_toggle = BigParamControl(tr("Driver attention voice alerts"), "RoadObserverAttentionEnabled")
+    road_observer_lead_toggle = BigParamControl(tr("Lead vehicle voice alerts"), "RoadObserverLeadEnabled")
+    road_observer_slowing_toggle = BigParamControl(tr("Slowing traffic voice alerts"), "RoadObserverSlowingTrafficEnabled")
+    road_perception_toggle = BigParamControl(tr("Road scene detection (beta)"), "RoadPerceptionEnabled")
+    road_perception_voice_toggle = BigParamControl(tr("Road hazard voice alerts (beta)"), "RoadPerceptionVoiceEnabled")
+    road_perception_pedestrian_toggle = BigParamControl(tr("Pedestrian voice alerts"), "RoadPerceptionPedestrianEnabled")
+    road_perception_cyclist_toggle = BigParamControl(tr("Cyclist voice alerts"), "RoadPerceptionCyclistEnabled")
+    road_perception_light_toggle = BigParamControl(tr("Traffic-light voice alerts"), "RoadPerceptionTrafficLightEnabled")
     record_front = BigParamControl("record & upload driver camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)

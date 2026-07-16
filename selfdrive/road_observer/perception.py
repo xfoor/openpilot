@@ -13,7 +13,7 @@ COCO_TRAFFIC_LIGHT = 9
 RELEVANT_CLASSES = (COCO_PERSON, COCO_BICYCLE, COCO_TRAFFIC_LIGHT)
 
 
-class SceneEvent(str, enum.Enum):
+class SceneEvent(enum.StrEnum):
   NONE = "none"
   PEDESTRIAN_RISK = "pedestrianRisk"
   CYCLIST_RISK = "cyclistRisk"
@@ -91,10 +91,11 @@ def preprocess_nv12(buf, model_size: int = MODEL_SIZE) -> tuple[np.ndarray, np.n
   green = np.clip((298 * c - 100 * d - 208 * e + 128) >> 8, 0, 255)
   blue = np.clip((298 * c + 516 * d + 128) >> 8, 0, 255)
 
-  image = np.full((model_size, model_size, 3), 114, dtype=np.uint8)
-  image[:resized_h, :resized_w] = np.stack((blue, green, red), axis=-1).astype(np.uint8)
-  model_input = image.transpose(2, 0, 1).astype(np.float32)
-  return model_input, image
+  resized_image = np.stack((blue, green, red), axis=-1).astype(np.uint8)
+  model_image = np.full((model_size, model_size, 3), 114, dtype=np.uint8)
+  model_image[:resized_h, :resized_w] = resized_image
+  model_input = model_image.transpose(2, 0, 1).astype(np.float32)
+  return model_input, resized_image
 
 
 def _nms(boxes: np.ndarray, scores: np.ndarray, threshold: float) -> list[int]:
@@ -168,6 +169,25 @@ def decode_yolox(output: np.ndarray, model_size: int = MODEL_SIZE,
       ))
 
   return sorted(detections, key=lambda detection: detection.score, reverse=True)
+
+
+def remap_detections(detections: list[Detection], image_width: int, image_height: int,
+                     model_size: int = MODEL_SIZE) -> list[Detection]:
+  """Map boxes from the square model canvas to the unpadded camera image."""
+  x_scale = model_size / image_width
+  y_scale = model_size / image_height
+  remapped = []
+  for detection in detections:
+    x1, y1, x2, y2 = detection.bbox
+    bbox = (
+      float(np.clip(x1 * x_scale, 0.0, 1.0)),
+      float(np.clip(y1 * y_scale, 0.0, 1.0)),
+      float(np.clip(x2 * x_scale, 0.0, 1.0)),
+      float(np.clip(y2 * y_scale, 0.0, 1.0)),
+    )
+    if bbox[2] > bbox[0] and bbox[3] > bbox[1]:
+      remapped.append(Detection(detection.class_id, detection.score, bbox))
+  return remapped
 
 
 def classify_traffic_light(image_bgr: np.ndarray, bbox: tuple[float, float, float, float]) -> tuple[str | None, float]:

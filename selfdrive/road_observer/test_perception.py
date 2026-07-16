@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from openpilot.selfdrive.road_observer.perception import (
   COCO_PERSON,
@@ -11,6 +12,7 @@ from openpilot.selfdrive.road_observer.perception import (
   decode_yolox,
   get_perception_prompt,
   preprocess_nv12,
+  remap_detections,
 )
 
 
@@ -45,6 +47,23 @@ def test_decode_yolox_keeps_relevant_class():
   assert len(detections) == 1
   assert detections[0].class_id == COCO_PERSON
   assert detections[0].score > 0.8
+
+
+def test_comma_4_letterbox_box_maps_to_camera_corridor():
+  canvas_detection = Detection(COCO_PERSON, 0.8, (0.42, 0.20, 0.58, 0.54))
+  detections = remap_detections([canvas_detection], 416, 235)
+
+  assert detections[0].bbox[3] == pytest.approx(0.956, abs=0.002)
+
+  interpreter = SceneInterpreter()
+  image = np.zeros((235, 416, 3), dtype=np.uint8)
+  observations = [
+    interpreter.update(detections, image, 10.0, index * 0.5)
+    for index in range(3)
+  ]
+
+  assert observations[-1].event == SceneEvent.PEDESTRIAN_RISK
+  assert observations[-1].voice_eligible
 
 
 def test_classify_red_traffic_light():
