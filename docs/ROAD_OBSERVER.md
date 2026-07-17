@@ -66,6 +66,42 @@ Before publishing an installer commit:
 4. Keep road-perception voice alerts disabled until latency, thermals, and
    false positives have been reviewed.
 
+## RoadTalk companion
+
+The optional `roadtalkd` service lets the RoadTalk Android head-unit app query
+basic status, control only the custom observer audio, capture a forward-road
+photo, or record a one- or two-minute road video. It binds to the comma four's
+private Wi-Fi interface and never exposes CAN, shell, process control,
+arbitrary parameter writes, steering, braking, acceleration, or engagement.
+
+Pair while parked:
+
+1. Connect the comma four and Android radio to the same private Wi-Fi network.
+2. Enable ADB in comma settings.
+3. Open RoadTalk and tap `Pair Comma 4`, then disable ADB again.
+
+The app discovers comma over UDP port 7767 and uses HTTP port 7766. Pairing
+creates `/persist/roadtalk/shared_secret`; subsequent requests require an HMAC
+signature, timestamp, and one-time nonce. Pair only on a trusted private
+hotspot because the one-time bootstrap exchange is not encrypted.
+
+To revoke an old Android installation, run this while parked over SSH, then
+pair the new installation:
+
+```bash
+rm -f /persist/roadtalk/shared_secret
+```
+
+Supported commands are status, observer mute, observer unmute, quiet mode for
+15, 30, 60, or 120 minutes, a road photo, and a road video limited to one or
+two minutes. Photos and videos remain in `/data/media/0/roadtalk`; the service
+keeps the newest 20 photos and 8 videos. Video capture copies the existing
+low-bitrate `qcamera.ts` stream instead of starting another encoder.
+
+The app's local command path works without Internet. GPT Realtime maps natural
+requests to the same fixed allowlist and receives a road photo only when the
+user explicitly asks it to analyze the road ahead.
+
 ## Safety boundary
 
 The observer only publishes advisory messages to `soundd`. It never writes CAN,

@@ -89,6 +89,8 @@ class Soundd:
     self.ramp_start_time = 0.
 
     self.selfdrive_timeout_alert = False
+    self.observer_quiet_until = 0
+    self.observer_quiet_checked_at = 0.
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
 
@@ -165,7 +167,17 @@ class Soundd:
       self.current_sound_frame = 0
 
   def update_observer_prompt(self, prompt):
-    if prompt and self.current_alert == AudibleAlert.none:
+    now = time.monotonic()
+    if now - self.observer_quiet_checked_at >= 1.0:
+      try:
+        with open("/persist/roadtalk/quiet_until", encoding="utf-8") as quiet_file:
+          quiet_until = quiet_file.read(16).strip()
+        self.observer_quiet_until = int(quiet_until) if quiet_until.isdigit() else 0
+      except OSError:
+        self.observer_quiet_until = 0
+      self.observer_quiet_checked_at = now
+
+    if prompt and time.time() >= self.observer_quiet_until and self.current_alert == AudibleAlert.none:
       self.current_observer_prompt = prompt
       self.current_observer_sound_frame = 0
 

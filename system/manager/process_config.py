@@ -97,6 +97,7 @@ procs = [
   PythonProcess("dmonitoringd", "selfdrive.monitoring.dmonitoringd", driverview, enabled=(WEBCAM or not PC)),
   PythonProcess("roadobserverd", "selfdrive.road_observer.roadobserverd", only_onroad),
   PythonProcess("roadperceptionmodeld", "selfdrive.road_observer.roadperceptionmodeld", only_onroad, enabled=TICI),
+  PythonProcess("roadtalkd", "selfdrive.road_observer.roadtalkd", always_run, enabled=TICI),
   PythonProcess("qcomgpsd", "system.qcomgpsd.qcomgpsd", qcomgps, enabled=TICI),
   PythonProcess("pandad", "selfdrive.pandad.pandad", always_run),
   PythonProcess("paramsd", "selfdrive.locationd.paramsd", only_onroad),
