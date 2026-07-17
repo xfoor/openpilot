@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import time
 
-from openpilot.selfdrive.road_observer.roadcapture import RoadCapture
+from openpilot.selfdrive.road_observer.roadcapture import CAPTURE_NAME_PATTERN, RoadCapture
 from openpilot.selfdrive.road_observer.roadtalkd import (
   DISCOVERY_REQUEST,
   DISCOVERY_RESPONSE,
@@ -35,3 +35,10 @@ def test_video_duration_is_bounded():
   capture = RoadCapture()
   status, _ = capture.start_video(3)
   assert status == 400
+
+
+def test_capture_names_are_strictly_allowlisted():
+  assert CAPTURE_NAME_PATTERN.fullmatch("road-20260717-101112.jpg")
+  assert CAPTURE_NAME_PATTERN.fullmatch("road-20260717-101112-2m.ts")
+  assert not CAPTURE_NAME_PATTERN.fullmatch("../params")
+  assert not CAPTURE_NAME_PATTERN.fullmatch("road-20260717-101112.ts.part")

@@ -1,5 +1,6 @@
 import io
 from pathlib import Path
+import re
 import threading
 import time
 from typing import Any
@@ -8,10 +9,11 @@ from typing import Any
 CAPTURE_DIR = Path("/data/media/0/roadtalk")
 LOG_ROOT = Path("/data/media/0/realdata")
 TS_PACKET_BYTES = 188
-MAX_VIDEO_BYTES = 200 * 1024 * 1024
+MAX_VIDEO_BYTES = 90 * 1024 * 1024
 MAX_PHOTOS = 20
 MAX_VIDEOS = 8
 PHOTO_COOLDOWN_SECONDS = 5
+CAPTURE_NAME_PATTERN = re.compile(r"^road-\d{8}-\d{6}(?:-[12]m)?\.(?:jpg|ts)$")
 
 
 class RoadCapture:
@@ -48,6 +50,55 @@ class RoadCapture:
         "latestVideo": self.latest_video.name if self.latest_video else "",
         "captureError": self.last_error,
       }
+
+  @staticmethod
+  def capture_path(name: str) -> Path | None:
+    if not CAPTURE_NAME_PATTERN.fullmatch(name):
+      return None
+    path = CAPTURE_DIR / name
+    try:
+      if not path.is_file() or path.parent != CAPTURE_DIR:
+        return None
+    except OSError:
+      return None
+    return path
+
+  def media(self) -> list[dict[str, Any]]:
+    captures: list[dict[str, Any]] = []
+    try:
+      paths = list(CAPTURE_DIR.glob("road-*.jpg")) + list(CAPTURE_DIR.glob("road-*.ts"))
+    except OSError:
+      return captures
+    for path in paths:
+      if self.capture_path(path.name) is None:
+        continue
+      try:
+        stat = path.stat()
+      except OSError:
+        continue
+      captures.append({
+        "name": path.name,
+        "kind": "photo" if path.suffix == ".jpg" else "video",
+        "contentType": "image/jpeg" if path.suffix == ".jpg" else "video/mp2t",
+        "bytes": stat.st_size,
+        "createdAt": int(stat.st_mtime),
+      })
+    return sorted(captures, key=lambda capture: capture["createdAt"])
+
+  def delete_media(self, name: str) -> bool:
+    path = self.capture_path(name)
+    if path is None:
+      return False
+    try:
+      path.unlink()
+    except OSError:
+      return False
+    with self.lock:
+      if self.latest_photo == path:
+        self.latest_photo = None
+      if self.latest_video == path:
+        self.latest_video = None
+    return True
 
   def take_photo(self) -> tuple[int, dict[str, Any]]:
     with self.lock:
@@ -151,6 +202,7 @@ class RoadCapture:
 
   def _record_video(self, minutes: int) -> None:
     destination: Path | None = None
+    temporary: Path | None = None
     try:
       self._prepare_dir()
       existing = self._qcamera_files()
@@ -164,9 +216,10 @@ class RoadCapture:
       }
       timestamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
       destination = CAPTURE_DIR / f"road-{timestamp}-{minutes}m.ts"
+      temporary = destination.with_suffix(".ts.part")
       deadline = time.monotonic() + minutes * 60
 
-      with destination.open("wb") as output:
+      with temporary.open("wb") as output:
         while time.monotonic() < deadline:
           candidates = []
           for path in self._qcamera_files():
@@ -196,16 +249,19 @@ class RoadCapture:
           except OSError:
             continue
 
-      if destination.stat().st_size < TS_PACKET_BYTES * 100:
+      if temporary.stat().st_size < TS_PACKET_BYTES * 100:
         raise RuntimeError("qcamera stream did not produce enough video")
+      temporary.replace(destination)
       self._cleanup("road-*.ts", MAX_VIDEOS)
       with self.lock:
         self.latest_video = destination
         self.last_error = ""
     except Exception as error:
-      if destination is not None:
+      for path in (temporary, destination):
+        if path is None:
+          continue
         try:
-          destination.unlink()
+          path.unlink()
         except OSError:
           pass
       with self.lock:

@@ -176,6 +176,24 @@ class RoadTalkHandler(BaseHTTPRequestHandler):
     self.end_headers()
     self.wfile.write(body)
 
+  def _reply_file(self, path: Path) -> None:
+    content_type = "image/jpeg" if path.suffix == ".jpg" else "video/mp2t"
+    try:
+      size = path.stat().st_size
+      stream = path.open("rb")
+    except OSError:
+      self._reply(404, {"error": "Capture not found"})
+      return
+    with stream:
+      self.send_response(200)
+      self.send_header("Content-Type", content_type)
+      self.send_header("Content-Length", str(size))
+      self.send_header("Cache-Control", "no-store")
+      self.send_header("X-Content-Type-Options", "nosniff")
+      self.end_headers()
+      while chunk := stream.read(1024 * 1024):
+        self.wfile.write(chunk)
+
   def _body(self) -> bytes | None:
     try:
       length = int(self.headers.get("Content-Length", "0"))
@@ -191,7 +209,10 @@ class RoadTalkHandler(BaseHTTPRequestHandler):
   def do_GET(self) -> None:
     if not self._private_peer():
       self._reply(403, {"error": "Private network required"})
-    elif self.path not in ("/v1/status", "/v1/capture/photo"):
+    elif (
+      self.path not in ("/v1/status", "/v1/capture/photo", "/v1/capture/media")
+      and not self.path.startswith("/v1/capture/media/")
+    ):
       self._reply(404, {"error": "Not found"})
     elif not self.core.authenticate("GET", self.path, self.headers, b""):
       self._reply(401, {"error": "Authentication failed"})
@@ -201,8 +222,31 @@ class RoadTalkHandler(BaseHTTPRequestHandler):
         self._reply(404, {"error": "No road photo is available"})
       else:
         self._reply_jpeg(photo)
+    elif self.path == "/v1/capture/media":
+      self._reply(200, {"captures": self.core.capture.media()})
+    elif self.path.startswith("/v1/capture/media/"):
+      name = self.path.removeprefix("/v1/capture/media/")
+      path = self.core.capture.capture_path(name)
+      if path is None:
+        self._reply(404, {"error": "Capture not found"})
+      else:
+        self._reply_file(path)
     else:
       self._reply(200, self.core.status())
+
+  def do_DELETE(self) -> None:
+    if not self._private_peer():
+      self._reply(403, {"error": "Private network required"})
+    elif not self.path.startswith("/v1/capture/media/"):
+      self._reply(404, {"error": "Not found"})
+    elif not self.core.authenticate("DELETE", self.path, self.headers, b""):
+      self._reply(401, {"error": "Authentication failed"})
+    else:
+      name = self.path.removeprefix("/v1/capture/media/")
+      if self.core.capture.delete_media(name):
+        self._reply(200, {"ok": True, "deleted": name})
+      else:
+        self._reply(404, {"error": "Capture not found"})
 
   def do_POST(self) -> None:
     body = self._body()
