@@ -19,7 +19,7 @@ from urllib.parse import quote, urlsplit
 import requests
 
 
-CONFIG_PATH = Path("/persist/roadtalk/r2.json")
+CONFIG_PATH = Path("/data/roadtalk/r2.json")
 MAX_CONFIG_BYTES = 16 * 1024
 SUPPORTED_FILES = frozenset(("fcamera.hevc", "qcamera.ts"))
 DEFAULT_FILES = ("fcamera.hevc", "qcamera.ts")

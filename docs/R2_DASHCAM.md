@@ -31,7 +31,7 @@ comma4/golf/dashcam/2026-08-13--10-00-00--4/fcamera.hevc
 ## Private configuration
 
 Credentials are deliberately excluded from git. Create
-`/persist/roadtalk/r2.json` as the `comma` user with mode `0600`:
+`/data/roadtalk/r2.json` as the `comma` user with mode `0600`:
 
 ```json
 {
@@ -50,4 +50,5 @@ non-owner, group-readable, non-HTTPS, and non-R2 configurations.
 
 After changing the file, restart openpilot while parked. Uploads resume
 idempotently: if an object was accepted by R2 but the local marker was not
-written, the same object key is overwritten on the next attempt.
+written, the same object key is overwritten on the next attempt. The first run
+also archives all existing completed segments that still remain on the device.
