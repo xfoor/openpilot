@@ -34,3 +34,10 @@ one-time nonce.
 To revoke a pairing, remove `/persist/roadtalk/shared_secret` while parked and
 pair again. Captures are stored in `/data/media/0/roadtalk`; the service retains
 at most 20 photos and 8 videos.
+
+## Cloud archive
+
+Continuous forward-camera segments can be archived to a private Cloudflare R2
+bucket by the separate offroad-only `r2uploader` process. See
+[`R2_DASHCAM.md`](R2_DASHCAM.md) for storage impact, object layout, and secure
+credential provisioning.
