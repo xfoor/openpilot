@@ -832,8 +832,8 @@ msgid "Road scene detection (beta)"
 msgstr "Rilevamento scena stradale (beta)"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
-msgid "Road hazard voice alerts (beta)"
-msgstr "Avvisi vocali pericoli stradali (beta)"
+msgid "Pedestrian and cyclist voice alerts (beta)"
+msgstr "Avvisi vocali pedoni e ciclisti (beta)"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Driver attention voice alerts"

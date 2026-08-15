@@ -21,12 +21,10 @@ connection.
   15-minute break.
 - `È necessaria una pausa. Fermati appena possibile.` after 4.5 hours of driving
   without a 45-minute break.
-- `Attenzione, pedone sulla traiettoria.` for a repeatedly detected pedestrian
-  inside the estimated driving corridor.
-- `Attenzione, ciclista sulla traiettoria.` for a repeatedly detected cyclist
-  inside the estimated driving corridor.
-- `Semaforo rosso/giallo/verde.` for a repeatedly detected, centered traffic
-  light. Green is only announced after a confirmed red light while stopped.
+- `Attenzione, pedone sulla traiettoria.` for a tracked pedestrian occupying
+  the calibrated future path or moving toward it.
+- `Attenzione, ciclista sulla traiettoria.` for a tracked cyclist occupying the
+  calibrated future path or moving toward it.
 
 Stock openpilot alerts always have audio priority. The observer is enabled by
 default on this branch and can be disabled in Settings under
@@ -34,33 +32,46 @@ default on this branch and can be disabled in Settings under
 
 ## Local road perception
 
-`roadperceptionmodeld` samples the road camera at 2 Hz and runs the official
-YOLOX-Nano 416x416 COCO model locally on the comma 4 Qualcomm backend. It keeps
-only person, bicycle, and traffic-light detections, applies class-aware NMS,
-requires three matching observations, and estimates whether pedestrians or
-cyclists are inside a conservative image-space driving corridor.
+`roadperceptionmodeld` samples the road camera at 2 Hz and runs a compiled
+YOLOX-Nano 320x320 COCO model locally on the comma 4 Qualcomm backend. It keeps
+only person, bicycle, and traffic-light detections and applies class-aware NMS.
+Pedestrian and cyclist boxes are tracked across frames. Their ground contact
+points are projected through the comma's live camera calibration and compared
+with the future path already produced by openpilot's driving model. A warning
+requires either repeated occupancy of that path or tracked lateral motion that
+would enter it within 2.5 seconds and inside the speed-dependent warning
+distance. If calibration, camera identity, or the future path is unavailable,
+no pedestrian or cyclist voice prompt is eligible.
 
 Traffic-light color is estimated only inside a confirmed traffic-light crop.
-It does not infer which traffic light legally controls the current lane, so
-these messages are observations, not driving instructions.
+It does not infer which traffic light legally controls the current lane.
+Traffic-light observations are therefore hard-blocked from `soundd`, even if a
+raw observation incorrectly carries a voice flag. They remain shadow
+diagnostics for developing a dedicated signal model and lane association.
 
-`Road scene detection (beta)` and `Road hazard voice alerts (beta)` are disabled
-by default. Enable scene detection while parked for device validation, then
-enable voice only after reviewing local drives for false positives, thermal
-load, and model latency. When enabled, structured shadow-mode observations are
-published in `customReservedRawData0`.
+`Road scene detection (beta)` and `Pedestrian and cyclist voice alerts (beta)`
+are disabled by default. Enable scene detection while parked for device
+validation, then enable voice only after reviewing local drives for false
+positives and missed crossings. When enabled, structured shadow-mode
+observations are published in `customReservedRawData0`, including track ID,
+projected distance, path offset, lateral speed, and the reason a risk qualified.
 
-An offline screen of 191 retained Slovenia urban frames found reliable-looking
-person boxes but also three false traffic-light detections on roadside or
-service-station signs. Traffic-light voice must remain disabled until a more
-specific model and lane-association strategy pass a broader replay.
+An offline screen of 191 retained Slovenia urban frames produced 33 compiled
+person detections and two traffic-light candidates. The compiled model's median
+inference time was 27 ms and its 95th percentile was 29 ms on the comma 4. A
+focused 207-frame, 2 Hz replay around every person candidate produced 240
+detections but no path-occupancy or predicted-crossing alert: the people were
+parked or beside the driven path. This is useful negative coverage, not a
+pedestrian-crossing recall measurement. Traffic-light speech remains disabled
+until a signal-specific model and lane-association strategy pass broader
+positive and negative replay.
 
 Settings also provide individual switches for driver-attention, lead-vehicle,
-lead-braking, slowing-traffic, driver-health, pedestrian, cyclist, and
-traffic-light announcements. Turning off the road-hazard voice master prevents
-further local perception announcements without disabling stock openpilot safety
-sounds. Turning off Italian road observer separately prevents driver, lead, and
-traffic announcements from this observer.
+lead-braking, slowing-traffic, driver-health, pedestrian, and cyclist
+announcements. Turning off the perception voice master prevents pedestrian and
+cyclist announcements without disabling stock openpilot safety sounds. Turning
+off Italian road observer separately prevents driver, lead, and traffic
+announcements from this observer.
 
 The driving clocks count time above 1 m/s and persist across ignition cycles.
 A stationary period of 15 minutes resets the two-hour health reminder. A

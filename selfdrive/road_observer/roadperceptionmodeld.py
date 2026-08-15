@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 import json
+import pickle
 import time
 from pathlib import Path
 
 import numpy as np
 
+from cereal import log
 from cereal import messaging
 from msgq.visionipc import VisionIpcClient, VisionStreamType
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.selfdrive.road_observer.perception import (
   MODEL_SIZE,
   PERCEPTION_EVENT_PARAM,
+  RoadGeometry,
   SceneInterpreter,
   decode_yolox,
   preprocess_nv12,
@@ -20,33 +24,53 @@ from openpilot.selfdrive.road_observer.perception import (
 
 
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "yolox_nano.onnx"
+COMPILED_MODEL_PATH = Path(__file__).resolve().parent / "models" / "yolox_nano_tinygrad.pkl"
 INFERENCE_INTERVAL = 0.5
 
 
 class YoloXDetector:
-  def __init__(self, model_path: Path = MODEL_PATH, device: str = "QCOM"):
+  def __init__(self, model_path: Path = MODEL_PATH, compiled_model_path: Path = COMPILED_MODEL_PATH,
+               device: str = "QCOM"):
+    from tinygrad import TinyJit
     from tinygrad.nn.onnx import OnnxRunner
     from tinygrad.tensor import Tensor
 
     self.Tensor = Tensor
     self.device = device
-    self.runner = OnnxRunner(str(model_path))
+    self.precompiled = device == "QCOM" and compiled_model_path.is_file()
+    if self.precompiled:
+      with compiled_model_path.open("rb") as model_file:
+        self.run = pickle.load(model_file)
+      self.input_device = "NPY"
+    else:
+      runner = OnnxRunner(str(model_path))
+      self.run = TinyJit(
+        lambda images: next(iter(runner({"images": images}).values())).cast("float32"),
+        prune=True,
+      )
+      self.input_device = device
 
   def infer(self, model_input: np.ndarray):
-    tensor = self.Tensor(model_input[np.newaxis], device=self.device)
-    outputs = self.runner({"images": tensor})
-    return next(iter(outputs.values())).numpy()
+    tensor = self.Tensor(model_input[np.newaxis], device=self.input_device).realize()
+    return self.run(images=tensor).numpy()
 
 
 def serialize_observation(frame_id: int, execution_time: float, observation,
                           detections, voice_enabled: bool) -> bytes:
   payload = {
-    "version": 1,
+    "version": 2,
     "frameId": frame_id,
     "executionTime": round(execution_time, 4),
     "event": observation.event.value,
     "confidence": round(observation.confidence, 4),
     "voice": bool(voice_enabled and observation.voice_eligible),
+    "risk": {
+      "reason": observation.reason,
+      "trackId": observation.track_id,
+      "distance": round(observation.distance, 2) if observation.distance is not None else None,
+      "pathOffset": round(observation.path_offset, 2) if observation.path_offset is not None else None,
+      "lateralSpeed": round(observation.lateral_speed, 2) if observation.lateral_speed is not None else None,
+    },
     "detections": [
       {
         "classId": detection.class_id,
@@ -59,9 +83,38 @@ def serialize_observation(frame_id: int, execution_time: float, observation,
   return json.dumps(payload, separators=(",", ":")).encode()
 
 
+def build_road_geometry(sm: messaging.SubMaster) -> RoadGeometry | None:
+  services = ("modelV2", "liveCalibration", "deviceState", "roadCameraState")
+  if not all(sm.valid[service] and sm.alive[service] for service in services):
+    return None
+
+  calibration = sm["liveCalibration"]
+  if (
+    calibration.calStatus != log.LiveCalibrationData.Status.calibrated
+    or len(calibration.rpyCalib) != 3
+    or not calibration.height
+  ):
+    return None
+
+  camera_key = (str(sm["deviceState"].deviceType), str(sm["roadCameraState"].sensor))
+  camera = DEVICE_CAMERAS.get(camera_key)
+  if camera is None:
+    return None
+
+  path = sm["modelV2"].position
+  return RoadGeometry.build(
+    path.x,
+    path.y,
+    calibration.rpyCalib,
+    calibration.height[0],
+    camera.fcam.intrinsics,
+    camera.fcam.size,
+  )
+
+
 def main() -> None:
   params = Params()
-  sm = messaging.SubMaster(["carState"])
+  sm = messaging.SubMaster(["carState", "modelV2", "liveCalibration", "deviceState", "roadCameraState"])
   pm = messaging.PubMaster(["customReservedRawData0"])
   interpreter = SceneInterpreter()
 
@@ -91,13 +144,15 @@ def main() -> None:
     try:
       if detector is None:
         detector = YoloXDetector()
-        cloudlog.warning(f"road perception model loaded: {MODEL_PATH.name} ({MODEL_SIZE}x{MODEL_SIZE})")
+        backend = COMPILED_MODEL_PATH.name if detector.precompiled else MODEL_PATH.name
+        cloudlog.warning(f"road perception model loaded: {backend} ({MODEL_SIZE}x{MODEL_SIZE})")
 
       started = time.perf_counter()
       model_input, image_bgr = preprocess_nv12(buf)
       detections = decode_yolox(detector.infer(model_input))
       detections = remap_detections(detections, image_bgr.shape[1], image_bgr.shape[0])
-      observation = interpreter.update(detections, image_bgr, sm["carState"].vEgo, now)
+      geometry = build_road_geometry(sm)
+      observation = interpreter.update(detections, image_bgr, sm["carState"].vEgo, now, geometry)
       execution_time = time.perf_counter() - started
       event_param = PERCEPTION_EVENT_PARAM.get(observation.event)
       voice_enabled = (

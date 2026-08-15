@@ -77,7 +77,7 @@ class TestSoundd:
   def test_perception_prompt_requires_voice_flag(self):
     assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":false}') == 0
     assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":true}') == 8
-    assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":true}') == 12
+    assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":true}') == 0
     assert get_perception_prompt(b'not-json') == 0
 
   # TODO: add test with micd for checking that soundd actually outputs sounds
