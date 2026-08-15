@@ -52,11 +52,15 @@ observer_sound_list: dict[int, str] = {
   1: "observer_attention_it.wav",
   2: "observer_lead_departed_it.wav",
   3: "observer_slowing_traffic_it.wav",
-  4: "observer_pedestrian_it.wav",
-  5: "observer_cyclist_it.wav",
-  6: "observer_light_red_it.wav",
-  7: "observer_light_yellow_it.wav",
-  8: "observer_light_green_it.wav",
+  4: "observer_lead_braking_it.wav",
+  5: "observer_drowsiness_it.wav",
+  6: "observer_rest_recommended_it.wav",
+  7: "observer_rest_required_it.wav",
+  8: "observer_pedestrian_it.wav",
+  9: "observer_cyclist_it.wav",
+  10: "observer_light_red_it.wav",
+  11: "observer_light_yellow_it.wav",
+  12: "observer_light_green_it.wav",
 }
 
 if HARDWARE.get_device_type() == "tizi":
@@ -177,7 +181,7 @@ class Soundd:
         self.observer_quiet_until = 0
       self.observer_quiet_checked_at = now
 
-    if prompt and time.time() >= self.observer_quiet_until and self.current_alert == AudibleAlert.none:
+    if prompt and time.time() >= self.observer_quiet_until and self.current_alert == AudibleAlert.none:  # noqa: TID251
       self.current_observer_prompt = prompt
       self.current_observer_sound_frame = 0
 

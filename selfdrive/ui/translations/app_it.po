@@ -844,8 +844,16 @@ msgid "Lead vehicle voice alerts"
 msgstr "Avvisi vocali veicolo davanti"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Lead braking voice alerts"
+msgstr "Avvisi vocali frenata veicolo davanti"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Slowing traffic voice alerts"
 msgstr "Avvisi vocali traffico in rallentamento"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Driver health and rest alerts"
+msgstr "Avvisi salute conducente e pause"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Pedestrian voice alerts"

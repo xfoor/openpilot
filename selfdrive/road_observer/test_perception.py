@@ -109,7 +109,7 @@ def test_green_voice_only_after_confirmed_red_while_stopped():
 
 
 def test_perception_prompt_parser():
-  assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":true}') == 4
+  assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":true}') == 8
   assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":false}') == 0
   assert get_perception_prompt(b'not-json') == 0
 

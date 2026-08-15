@@ -22,7 +22,9 @@ class TogglesLayoutMici(NavScroller):
     road_observer_toggle = BigParamControl(tr("Italian road observer"), "RoadObserverEnabled")
     road_observer_attention_toggle = BigParamControl(tr("Driver attention voice alerts"), "RoadObserverAttentionEnabled")
     road_observer_lead_toggle = BigParamControl(tr("Lead vehicle voice alerts"), "RoadObserverLeadEnabled")
+    road_observer_lead_braking_toggle = BigParamControl(tr("Lead braking voice alerts"), "RoadObserverLeadBrakingEnabled")
     road_observer_slowing_toggle = BigParamControl(tr("Slowing traffic voice alerts"), "RoadObserverSlowingTrafficEnabled")
+    road_observer_driver_health_toggle = BigParamControl(tr("Driver health and rest alerts"), "RoadObserverDriverHealthEnabled")
     road_perception_toggle = BigParamControl(tr("Road scene detection (beta)"), "RoadPerceptionEnabled")
     road_perception_voice_toggle = BigParamControl(tr("Road hazard voice alerts (beta)"), "RoadPerceptionVoiceEnabled")
     road_perception_pedestrian_toggle = BigParamControl(tr("Pedestrian voice alerts"), "RoadPerceptionPedestrianEnabled")
@@ -41,7 +43,9 @@ class TogglesLayoutMici(NavScroller):
       road_observer_toggle,
       road_observer_attention_toggle,
       road_observer_lead_toggle,
+      road_observer_lead_braking_toggle,
       road_observer_slowing_toggle,
+      road_observer_driver_health_toggle,
       road_perception_toggle,
       road_perception_voice_toggle,
       road_perception_pedestrian_toggle,
@@ -61,7 +65,9 @@ class TogglesLayoutMici(NavScroller):
       ("RoadObserverEnabled", road_observer_toggle),
       ("RoadObserverAttentionEnabled", road_observer_attention_toggle),
       ("RoadObserverLeadEnabled", road_observer_lead_toggle),
+      ("RoadObserverLeadBrakingEnabled", road_observer_lead_braking_toggle),
       ("RoadObserverSlowingTrafficEnabled", road_observer_slowing_toggle),
+      ("RoadObserverDriverHealthEnabled", road_observer_driver_health_toggle),
       ("RoadPerceptionEnabled", road_perception_toggle),
       ("RoadPerceptionVoiceEnabled", road_perception_voice_toggle),
       ("RoadPerceptionPedestrianEnabled", road_perception_pedestrian_toggle),

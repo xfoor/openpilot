@@ -10,8 +10,17 @@ connection.
   or at the first stock attention alert.
 - `Il veicolo davanti è partito.` after a confirmed stop when the tracked lead
   vehicle moves away.
+- `Attenzione, il veicolo davanti sta frenando.` when a close, confidently
+  tracked lead decelerates for at least half a second and the driver has not
+  started braking.
 - `Attenzione, traffico in rallentamento.` after sustained rapid closing on a
   tracked lead vehicle.
+- `Sembri stanco. Fermati appena possibile.` after the driver model reports
+  sustained sleep probability while the car is moving.
+- `Guida da due ore. Programma una pausa.` after two hours of driving without a
+  15-minute break.
+- `È necessaria una pausa. Fermati appena possibile.` after 4.5 hours of driving
+  without a 45-minute break.
 - `Attenzione, pedone sulla traiettoria.` for a repeatedly detected pedestrian
   inside the estimated driving corridor.
 - `Attenzione, ciclista sulla traiettoria.` for a repeatedly detected cyclist
@@ -41,12 +50,23 @@ enable voice only after reviewing local drives for false positives, thermal
 load, and model latency. When enabled, structured shadow-mode observations are
 published in `customReservedRawData0`.
 
+An offline screen of 191 retained Slovenia urban frames found reliable-looking
+person boxes but also three false traffic-light detections on roadside or
+service-station signs. Traffic-light voice must remain disabled until a more
+specific model and lane-association strategy pass a broader replay.
+
 Settings also provide individual switches for driver-attention, lead-vehicle,
-slowing-traffic, pedestrian, cyclist, and traffic-light announcements. Turning
-off the road-hazard voice master prevents further local perception
-announcements without disabling stock openpilot safety sounds. Turning off
-Italian road observer separately prevents attention, lead, and slowing-traffic
-announcements.
+lead-braking, slowing-traffic, driver-health, pedestrian, cyclist, and
+traffic-light announcements. Turning off the road-hazard voice master prevents
+further local perception announcements without disabling stock openpilot safety
+sounds. Turning off Italian road observer separately prevents driver, lead, and
+traffic announcements from this observer.
+
+The driving clocks count time above 1 m/s and persist across ignition cycles.
+A stationary period of 15 minutes resets the two-hour health reminder. A
+stationary period of 45 minutes also resets the 4.5-hour driving-limit warning.
+Rest and drowsiness speech waits until the car is above 5 m/s. These are
+wellness reminders, not a certified tachograph or legal compliance system.
 
 ## Build and release
 
@@ -58,8 +78,10 @@ Python and UI code against stale stock binaries.
 
 Before publishing an installer commit:
 
-1. Complete a clean `scons` build in the repository's supported build
-   environment.
+1. Rebuild every affected native artifact from the exact installer commit in
+   the comma 4 build environment. This change requires at least
+   `common/params_pyx.so`, `cereal/messaging/bridge`, and
+   `system/loggerd/loggerd`.
 2. Install while parked with a reliable power source and keep SSH available.
 3. Confirm manager, UI, pandad, `roadobserverd`, and
    `roadperceptionmodeld` remain healthy before driving.
@@ -107,9 +129,19 @@ user explicitly asks it to analyze the road ahead.
 The observer only publishes advisory messages to `soundd`. It never writes CAN,
 changes steering, applies braking, or changes openpilot engagement.
 
+On the tested Volkswagen Golf Mk7, openpilot longitudinal control is
+unsupported. The observer cannot apply a gentle brake or regulate road speed
+while openpilot is disengaged; braking remains the responsibility of the driver
+and the vehicle's stock ACC/AEB systems.
+
 The detector is not safety-certified, does not see outside the camera field of
 view, can miss or misclassify objects, and can select a traffic light belonging
 to another lane. Network inference is intentionally not in the alert path:
 connectivity and cloud latency are unsuitable for time-critical road warnings.
 Do not act on a spoken traffic-light color without verifying it visually, and
 do not treat this observer as a substitute for an attentive driver.
+
+The COCO perception model does not detect or read European speed-limit signs.
+Speed-limit voice warnings require a separately validated sign-recognition or
+offline map-matching source. No speed-limit value was present in the archived
+navigation, map, or Golf CAN signals.

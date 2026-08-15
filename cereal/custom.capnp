@@ -19,6 +19,10 @@ struct RoadObserverState @0x81c2f05a394cf4af {
     attention @1;
     leadDeparted @2;
     slowingTraffic @3;
+    leadBraking @4;
+    drowsiness @5;
+    restRecommended @6;
+    restRequired @7;
   }
 }
 

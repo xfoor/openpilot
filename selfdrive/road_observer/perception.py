@@ -23,11 +23,11 @@ class SceneEvent(enum.StrEnum):
 
 
 PERCEPTION_PROMPT_MAP = {
-  SceneEvent.PEDESTRIAN_RISK.value: 4,
-  SceneEvent.CYCLIST_RISK.value: 5,
-  SceneEvent.TRAFFIC_LIGHT_RED.value: 6,
-  SceneEvent.TRAFFIC_LIGHT_YELLOW.value: 7,
-  SceneEvent.TRAFFIC_LIGHT_GREEN.value: 8,
+  SceneEvent.PEDESTRIAN_RISK.value: 8,
+  SceneEvent.CYCLIST_RISK.value: 9,
+  SceneEvent.TRAFFIC_LIGHT_RED.value: 10,
+  SceneEvent.TRAFFIC_LIGHT_YELLOW.value: 11,
+  SceneEvent.TRAFFIC_LIGHT_GREEN.value: 12,
 }
 
 PERCEPTION_EVENT_PARAM = {
