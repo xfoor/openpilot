@@ -21,13 +21,6 @@ connection.
   15-minute break.
 - `È necessaria una pausa. Fermati appena possibile.` after 4.5 hours of driving
   without a 45-minute break.
-- `Attenzione, stai uscendo dalla corsia a sinistra.` for a detected left lane
-  departure while openpilot is not steering.
-- `Attenzione, stai uscendo dalla corsia a destra.` for a detected right lane
-  departure while openpilot is not steering.
-- `Stai uscendo spesso dalla corsia. Fermati e fai una pausa.` after five
-  separate lane departures within 15 minutes. This reminder repeats no more
-  than once every 30 minutes.
 - `Attenzione, pedone sulla traiettoria.` for a tracked pedestrian occupying
   the calibrated future path or moving toward it.
 - `Attenzione, ciclista sulla traiettoria.` for a tracked cyclist occupying the
@@ -36,26 +29,6 @@ connection.
 Stock openpilot alerts always have audio priority. The observer is enabled by
 default on this branch and can be disabled in Settings under
 `Italian road observer`.
-
-## Lane departure assistance
-
-Directional lane speech uses openpilot's existing lane-departure signal. The
-stock detector requires a speed above 50 km/h, a reliable lane estimate, no
-recent turn signal, and openpilot lateral control to be inactive. A continuous
-departure is treated as one event. Separate directional warnings are debounced
-for four seconds.
-
-The directional voice replaces the stock generic lane chime only when it can
-actually start. If the observer, attention-and-lane setting, or lane-departure
-setting is disabled, or observer audio is temporarily muted, the stock chime
-remains unchanged. Repeated-drift speech uses the existing driver-health
-setting; when that setting is disabled, the normal directional warning is
-still spoken.
-
-This feature is warning-only while the driver is steering. Comma can actively
-center the car only after the driver deliberately engages openpilot on a
-supported road. It never silently takes steering control in response to a lane
-departure.
 
 ## Local road perception
 
@@ -93,12 +66,12 @@ pedestrian-crossing recall measurement. Traffic-light speech remains disabled
 until a signal-specific model and lane-association strategy pass broader
 positive and negative replay.
 
-Settings also provide individual switches for driver-attention and lane,
-lead-vehicle, lead-braking, slowing-traffic, driver-health, pedestrian, and
-cyclist announcements. Turning off the perception voice master prevents
-pedestrian and cyclist announcements without disabling stock openpilot safety
-sounds. Turning off Italian road observer separately prevents driver, lane,
-lead, and traffic announcements from this observer.
+Settings also provide individual switches for driver-attention, lead-vehicle,
+lead-braking, slowing-traffic, driver-health, pedestrian, and cyclist
+announcements. Turning off the perception voice master prevents pedestrian and
+cyclist announcements without disabling stock openpilot safety sounds. Turning
+off Italian road observer separately prevents driver, lead, and traffic
+announcements from this observer.
 
 The driving clocks count time above 1 m/s and persist across ignition cycles.
 A stationary period of 15 minutes resets the two-hour health reminder. A

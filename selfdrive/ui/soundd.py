@@ -7,15 +7,9 @@ import wave
 from cereal import car, messaging
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.filter_simple import FirstOrderFilter
-from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.road_observer.lane_departure import (
-  LANE_PROMPT_PARAM,
-  LaneDepartureAlerter,
-  LanePrompt,
-)
 from openpilot.selfdrive.road_observer.perception import get_perception_prompt
 
 from openpilot.system import micd
@@ -38,7 +32,6 @@ if HARDWARE.get_device_type() == "tizi":
   VOLUME_BASE = 10
 
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
-VisualAlert = car.CarControl.HUDControl.VisualAlert
 
 
 sound_list: dict[int, tuple[str, int | None, float]] = {
@@ -68,9 +61,6 @@ observer_sound_list: dict[int, str] = {
   10: "observer_light_red_it.wav",
   11: "observer_light_yellow_it.wav",
   12: "observer_light_green_it.wav",
-  LanePrompt.DEPARTURE_LEFT: "observer_lane_left_it.wav",
-  LanePrompt.DEPARTURE_RIGHT: "observer_lane_right_it.wav",
-  LanePrompt.REPEATED_DEPARTURE: "observer_lane_repeated_it.wav",
 }
 
 if HARDWARE.get_device_type() == "tizi":
@@ -91,8 +81,6 @@ def check_selfdrive_timeout_alert(sm):
 
 class Soundd:
   def __init__(self):
-    self.params = Params()
-    self.lane_alerter = LaneDepartureAlerter()
     self.load_sounds()
 
     self.current_alert = AudibleAlert.none
@@ -105,7 +93,6 @@ class Soundd:
     self.ramp_start_time = 0.
 
     self.selfdrive_timeout_alert = False
-    self.suppress_ldw_prompt = False
     self.observer_quiet_until = 0
     self.observer_quiet_checked_at = 0.
 
@@ -183,7 +170,7 @@ class Soundd:
       self.current_alert = new_alert
       self.current_sound_frame = 0
 
-  def update_observer_prompt(self, prompt) -> bool:
+  def update_observer_prompt(self, prompt):
     now = time.monotonic()
     if now - self.observer_quiet_checked_at >= 1.0:
       try:
@@ -194,63 +181,13 @@ class Soundd:
         self.observer_quiet_until = 0
       self.observer_quiet_checked_at = now
 
-    if (
-      prompt
-      and time.time() >= self.observer_quiet_until  # noqa: TID251
-      and self.current_alert == AudibleAlert.none
-      and not self.current_observer_prompt
-    ):
+    if prompt and time.time() >= self.observer_quiet_until and self.current_alert == AudibleAlert.none:  # noqa: TID251
       self.current_observer_prompt = prompt
       self.current_observer_sound_frame = 0
-      return True
-    return False
-
-  def update_lane_departure(self, sm) -> None:
-    lane_valid = sm.all_checks(["driverAssistance", "carControl"])
-    prompt = self.lane_alerter.update(
-      time.monotonic(),
-      left=lane_valid and sm["driverAssistance"].leftLaneDeparture,
-      right=lane_valid and sm["driverAssistance"].rightLaneDeparture,
-      lateral_active=not lane_valid or sm["carControl"].latActive,
-    )
-    if prompt == LanePrompt.NONE:
-      return
-
-    if not self.params.get_bool("IsLdwEnabled") or not self.params.get_bool("RoadObserverEnabled"):
-      return
-
-    # Keep directional lane speech when the separate repeated-drift reminder is disabled.
-    if prompt == LanePrompt.REPEATED_DEPARTURE and not self.params.get_bool(LANE_PROMPT_PARAM[prompt]):
-      prompt = LanePrompt.DEPARTURE_LEFT if sm["driverAssistance"].leftLaneDeparture else LanePrompt.DEPARTURE_RIGHT
-    if not self.params.get_bool(LANE_PROMPT_PARAM[prompt]):
-      return
-
-    ldw_visual = sm["selfdriveState"].alertHudVisual == VisualAlert.ldw
-    saved_alert = self.current_alert
-    saved_frame = self.current_sound_frame
-    replacing_stock_chime = ldw_visual and saved_alert == AudibleAlert.prompt
-    if replacing_stock_chime:
-      self.current_alert = AudibleAlert.none
-      self.current_sound_frame = 0
-
-    started = self.update_observer_prompt(int(prompt))
-    if started:
-      self.suppress_ldw_prompt = True
-    elif replacing_stock_chime:
-      self.current_alert = saved_alert
-      self.current_sound_frame = saved_frame
 
   def get_audible_alert(self, sm):
     if sm.updated['selfdriveState']:
-      ldw_visual = sm['selfdriveState'].alertHudVisual == VisualAlert.ldw
-      if (
-        not ldw_visual
-        and self.current_observer_prompt not in LANE_PROMPT_PARAM
-      ):
-        self.suppress_ldw_prompt = False
       new_alert = sm['selfdriveState'].alertSound.raw
-      if ldw_visual and self.suppress_ldw_prompt and new_alert == AudibleAlert.prompt:
-        new_alert = AudibleAlert.none
       self.update_alert(new_alert)
     elif check_selfdrive_timeout_alert(sm):
       self.update_alert(AudibleAlert.warningImmediate)
@@ -259,7 +196,6 @@ class Soundd:
       self.update_alert(AudibleAlert.none)
       self.selfdrive_timeout_alert = False
 
-    self.update_lane_departure(sm)
     if sm.updated['roadObserverState']:
       self.update_observer_prompt(sm['roadObserverState'].prompt.raw)
     if sm.updated['customReservedRawData0']:
@@ -280,14 +216,7 @@ class Soundd:
     # sounddevice must be imported after forking processes
     import sounddevice as sd
 
-    sm = messaging.SubMaster([
-      'selfdriveState',
-      'soundPressure',
-      'roadObserverState',
-      'customReservedRawData0',
-      'driverAssistance',
-      'carControl',
-    ])
+    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'roadObserverState', 'customReservedRawData0'])
 
     with self.get_stream(sd) as stream:
       rk = Ratekeeper(20)

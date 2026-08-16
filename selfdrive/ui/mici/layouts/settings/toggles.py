@@ -20,7 +20,7 @@ class TogglesLayoutMici(NavScroller):
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
     road_observer_toggle = BigParamControl(tr("Italian road observer"), "RoadObserverEnabled")
-    road_observer_attention_toggle = BigParamControl(tr("Driver attention and lane voice alerts"), "RoadObserverAttentionEnabled")
+    road_observer_attention_toggle = BigParamControl(tr("Driver attention voice alerts"), "RoadObserverAttentionEnabled")
     road_observer_lead_toggle = BigParamControl(tr("Lead vehicle voice alerts"), "RoadObserverLeadEnabled")
     road_observer_lead_braking_toggle = BigParamControl(tr("Lead braking voice alerts"), "RoadObserverLeadBrakingEnabled")
     road_observer_slowing_toggle = BigParamControl(tr("Slowing traffic voice alerts"), "RoadObserverSlowingTrafficEnabled")

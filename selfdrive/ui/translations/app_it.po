@@ -836,8 +836,8 @@ msgid "Pedestrian and cyclist voice alerts (beta)"
 msgstr "Avvisi vocali pedoni e ciclisti (beta)"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
-msgid "Driver attention and lane voice alerts"
-msgstr "Avvisi vocali attenzione e corsia"
+msgid "Driver attention voice alerts"
+msgstr "Avvisi vocali attenzione conducente"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Lead vehicle voice alerts"
