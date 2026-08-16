@@ -1,10 +1,14 @@
 import pytest
 
+from cereal import messaging
 from openpilot.selfdrive.road_observer.roadobserverd import (
   DriveTimeState,
+  OBSERVER_RATE,
+  OBSERVER_SERVICES,
   ObserverInput,
   Prompt,
   RoadObserver,
+  _build_submaster,
   restore_drive_time_state,
   serialize_drive_time_state,
   PROMPT_PARAM,
@@ -35,6 +39,18 @@ def state(now: float, **kwargs) -> ObserverInput:
 
 def test_every_prompt_has_a_setting():
   assert set(PROMPT_PARAM) == set(Prompt) - {Prompt.NONE}
+
+
+def test_submaster_health_uses_observer_loop_rate(monkeypatch):
+  expected = object()
+
+  def build(services, *, frequency):
+    assert services == OBSERVER_SERVICES
+    assert frequency == OBSERVER_RATE
+    return expected
+
+  monkeypatch.setattr(messaging, "SubMaster", build)
+  assert _build_submaster() is expected
 
 
 def test_attention_only_on_alert_transition():

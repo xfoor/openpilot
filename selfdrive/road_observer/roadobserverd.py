@@ -10,6 +10,10 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 
 
+OBSERVER_RATE = 5
+OBSERVER_SERVICES = ["carState", "radarState", "driverMonitoringState", "driverStateV2"]
+
+
 class Prompt(enum.IntEnum):
   NONE = 0
   ATTENTION = 1
@@ -253,6 +257,11 @@ def serialize_drive_time_state(state: DriveTimeState, wall_time: float) -> dict:
   }
 
 
+def _build_submaster() -> messaging.SubMaster:
+  # Health tracking must use the observer's loop rate, not the 100 Hz carState rate.
+  return messaging.SubMaster(OBSERVER_SERVICES, frequency=OBSERVER_RATE)
+
+
 def main() -> None:
   params = Params()
   drive_time_state = restore_drive_time_state(
@@ -260,9 +269,9 @@ def main() -> None:
     time.time(),  # noqa: TID251  # Wall time carries stopped duration across reboots.
   )
   observer = RoadObserver(drive_time_state)
-  sm = messaging.SubMaster(["carState", "radarState", "driverMonitoringState", "driverStateV2"])
+  sm = _build_submaster()
   pm = messaging.PubMaster(["roadObserverState"])
-  rk = Ratekeeper(5)
+  rk = Ratekeeper(OBSERVER_RATE)
   last_persist_at = time.monotonic()
 
   while True:
