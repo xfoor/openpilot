@@ -27,6 +27,16 @@ LaneChangeDirection = log.LaneChangeDirection
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 
 
+def should_auto_resume_from_standstill(enabled: bool, standstill: bool, should_stop: bool,
+                                       brand: str, pcm_cruise: bool) -> bool:
+  if not enabled or not standstill or should_stop:
+    return False
+
+  # Volkswagen stock ACC owns the throttle and can launch aggressively toward
+  # its 30 km/h minimum set speed. Require a driver-controlled initial move.
+  return not (brand == "volkswagen" and pcm_cruise)
+
+
 class Controls:
   def __init__(self) -> None:
     self.params = Params()
@@ -153,7 +163,13 @@ class Controls:
 
     CC.cruiseControl.override = CC.enabled and not CC.longActive and self.CP.openpilotLongitudinalControl
     CC.cruiseControl.cancel = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)
-    CC.cruiseControl.resume = CC.enabled and CS.cruiseState.standstill and not self.sm['longitudinalPlan'].shouldStop
+    CC.cruiseControl.resume = should_auto_resume_from_standstill(
+      CC.enabled,
+      CS.cruiseState.standstill,
+      self.sm['longitudinalPlan'].shouldStop,
+      self.CP.brand,
+      self.CP.pcmCruise,
+    )
 
     hudControl = CC.hudControl
     hudControl.setSpeed = float(CS.vCruiseCluster * CV.KPH_TO_MS)
