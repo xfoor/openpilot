@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import pickle
+import sys
 import time
 from pathlib import Path
 
@@ -17,28 +18,44 @@ from openpilot.selfdrive.road_observer.perception import (
   MODEL_SIZE,
   PERCEPTION_EVENT_PARAM,
   RoadGeometry,
+  SceneEvent,
   SceneInterpreter,
+  SceneObservation,
   classify_driver_gaze,
   decode_yolox,
   preprocess_nv12,
   remap_detections,
 )
+from openpilot.selfdrive.road_observer.speed_limit import (
+  SPEED_LIMIT_MODEL_SIZE,
+  SPEED_SIGN_ROI,
+  SpeedLimitObservation,
+  SpeedLimitTracker,
+  classify_speed_limit_candidates,
+  decode_speed_sign_yolov8,
+  project_speed_limit_detections,
+  remap_speed_sign_candidates,
+)
 
 
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "yolox_nano.onnx"
 COMPILED_MODEL_PATH = Path(__file__).resolve().parent / "models" / "yolox_nano_tinygrad.pkl"
+SPEED_SIGN_MODEL_PATH = Path(__file__).resolve().parent / "models" / "speed_sign_yolov8n.onnx"
+SPEED_CLASSIFIER_MODEL_PATH = Path(__file__).resolve().parent / "models" / "speed_sign_classifier.onnx"
+ONNX_RUNTIME_VENDOR_PATH = Path(__file__).resolve().parent / "vendor"
 INFERENCE_INTERVAL = 0.5
 
 
 class YoloXDetector:
   def __init__(self, model_path: Path = MODEL_PATH, compiled_model_path: Path = COMPILED_MODEL_PATH,
-               device: str = "QCOM"):
+               device: str = "QCOM", input_name: str = "images"):
     from tinygrad import TinyJit
     from tinygrad.nn.onnx import OnnxRunner
     from tinygrad.tensor import Tensor
 
     self.Tensor = Tensor
     self.device = device
+    self.input_name = input_name
     self.precompiled = device == "QCOM" and compiled_model_path.is_file()
     if self.precompiled:
       with compiled_model_path.open("rb") as model_file:
@@ -54,19 +71,67 @@ class YoloXDetector:
 
   def infer(self, model_input: np.ndarray):
     tensor = self.Tensor(model_input[np.newaxis], device=self.input_device).realize()
-    return self.run(images=tensor).numpy()
+    return self.run(**{self.input_name: tensor}).numpy()
+
+
+class OnnxRuntimeCpuModel:
+  def __init__(self, model_path: Path, intra_op_num_threads: int):
+    vendor_path = str(ONNX_RUNTIME_VENDOR_PATH)
+    if vendor_path not in sys.path:
+      sys.path.insert(0, vendor_path)
+
+    import onnxruntime as ort
+
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = intra_op_num_threads
+    options.inter_op_num_threads = 1
+    options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    options.add_session_config_entry("session.inter_op.allow_spinning", "0")
+    self.session = ort.InferenceSession(
+      str(model_path),
+      sess_options=options,
+      providers=["CPUExecutionProvider"],
+    )
+    inputs = self.session.get_inputs()
+    if len(inputs) != 1:
+      raise ValueError(f"unexpected ONNX model input count: {len(inputs)}")
+    self.input_name = inputs[0].name
+
+  def infer(self, model_input: np.ndarray):
+    batched_input = np.ascontiguousarray(model_input[np.newaxis], dtype=np.float32)
+    return self.session.run(None, {self.input_name: batched_input})[0]
+
+
+class SpeedSignDetector(OnnxRuntimeCpuModel):
+  def __init__(self, model_path: Path = SPEED_SIGN_MODEL_PATH):
+    super().__init__(model_path, intra_op_num_threads=2)
+
+
+class SpeedSignClassifier(OnnxRuntimeCpuModel):
+  def __init__(self, model_path: Path = SPEED_CLASSIFIER_MODEL_PATH):
+    super().__init__(model_path, intra_op_num_threads=1)
 
 
 def serialize_observation(frame_id: int, execution_time: float, observation,
-                          detections, event_id: int, camera_source: str) -> bytes:
+                          detections, event_id: int, camera_source: str,
+                          speed_limit: SpeedLimitObservation | None = None,
+                          speed_limit_detections=(), speed_limit_event_id: int = 0,
+                          speed_limit_overspeed: bool = False) -> bytes:
+  speed_limit = speed_limit or SpeedLimitObservation()
+  speed_limit_voice = event_id == 0 and speed_limit_event_id > 0
+  event = SceneEvent.SPEED_LIMIT.value if speed_limit_voice else observation.event.value
+  confidence = speed_limit.confidence if speed_limit_voice else observation.confidence
+  voice_event_id = speed_limit_event_id if speed_limit_voice else event_id
   payload = {
-    "version": 4,
+    "version": 5,
     "frameId": frame_id,
     "executionTime": round(execution_time, 4),
-    "event": observation.event.value,
-    "confidence": round(observation.confidence, 4),
-    "voice": event_id > 0,
-    "eventId": event_id,
+    "event": event,
+    "confidence": round(confidence, 4),
+    "voice": voice_event_id > 0,
+    "eventId": voice_event_id,
     "camera": camera_source,
     "side": observation.side,
     "risk": {
@@ -85,6 +150,23 @@ def serialize_observation(frame_id: int, execution_time: float, observation,
       }
       for detection in detections[:12]
     ],
+    "speedLimit": {
+      "limitKph": speed_limit.limit_kph,
+      "confidence": round(speed_limit.confidence, 4),
+      "confirmed": speed_limit.confirmed,
+      "announce": speed_limit.announce,
+      "trackId": speed_limit.track_id,
+      "reason": speed_limit.reason,
+      "overspeed": speed_limit_overspeed,
+      "detections": [
+        {
+          "limitKph": detection.limit_kph,
+          "score": round(detection.score, 4),
+          "bbox": [round(value, 4) for value in detection.bbox],
+        }
+        for detection in speed_limit_detections[:6]
+      ],
+    },
   }
   return json.dumps(payload, separators=(",", ":")).encode()
 
@@ -154,6 +236,7 @@ def main() -> None:
   ])
   pm = messaging.PubMaster(["customReservedRawData0"])
   interpreter = SceneInterpreter()
+  speed_limit_tracker = SpeedLimitTracker()
 
   while True:
     available_streams = VisionIpcClient.available_streams("camerad", block=False)
@@ -173,6 +256,8 @@ def main() -> None:
       time.sleep(0.1)
 
   detector = None
+  speed_sign_detector = None
+  speed_sign_classifier = None
   last_inference = -INFERENCE_INTERVAL
   cloudlog.warning(f"road perception road camera connected at {road_client.width}x{road_client.height}")
 
@@ -194,7 +279,9 @@ def main() -> None:
       continue
     last_inference = now
 
-    if not params.get_bool("RoadPerceptionEnabled"):
+    perception_enabled = params.get_bool("RoadPerceptionEnabled")
+    speed_limit_enabled = params.get_bool("RoadSpeedLimitEnabled")
+    if not perception_enabled and not speed_limit_enabled:
       continue
 
     try:
@@ -204,34 +291,66 @@ def main() -> None:
       camera_source = "road"
       camera_client = road_client
       buf = road_buf
-      if wide_client is not None and turning and car_state.vEgo < 15.0:
+      if perception_enabled and wide_client is not None and turning and car_state.vEgo < 15.0:
         wide_buf = wide_client.recv()
         if wide_buf is not None:
           camera_source = "wide"
           camera_client = wide_client
           buf = wide_buf
 
-      if detector is None:
-        detector = YoloXDetector()
-        backend = COMPILED_MODEL_PATH.name if detector.precompiled else MODEL_PATH.name
-        cloudlog.warning(f"road perception model loaded: {backend} ({MODEL_SIZE}x{MODEL_SIZE})")
-
       started = time.perf_counter()
-      model_input, image_bgr = preprocess_nv12(buf)
-      detections = decode_yolox(detector.infer(model_input))
-      detections = remap_detections(detections, image_bgr.shape[1], image_bgr.shape[0])
-      geometry = build_road_geometry(sm, camera_source)
-      observation = interpreter.update(
-        detections,
-        image_bgr,
-        car_state.vEgo,
-        now,
-        geometry,
-        turning=turning,
-        turn_signal=turn_signal,
-        camera_source=camera_source,
-        driver_gaze_side=driver_gaze_side,
-      )
+      detections = []
+      observation = SceneObservation(SceneEvent.NONE, 0.0, False)
+      if perception_enabled:
+        if detector is None:
+          detector = YoloXDetector()
+          backend = COMPILED_MODEL_PATH.name if detector.precompiled else MODEL_PATH.name
+          cloudlog.warning(f"road perception model loaded: {backend} ({MODEL_SIZE}x{MODEL_SIZE})")
+        model_input, image_bgr = preprocess_nv12(buf)
+        detections = decode_yolox(detector.infer(model_input))
+        detections = remap_detections(detections, image_bgr.shape[1], image_bgr.shape[0])
+        geometry = build_road_geometry(sm, camera_source)
+        observation = interpreter.update(
+          detections,
+          image_bgr,
+          car_state.vEgo,
+          now,
+          geometry,
+          turning=turning,
+          turn_signal=turn_signal,
+          camera_source=camera_source,
+          driver_gaze_side=driver_gaze_side,
+        )
+
+      speed_limit_detections = []
+      speed_limit = SpeedLimitObservation()
+      if speed_limit_enabled:
+        if speed_sign_detector is None:
+          speed_sign_detector = SpeedSignDetector()
+          speed_sign_classifier = SpeedSignClassifier()
+          cloudlog.warning(
+            f"speed sign models loaded: {SPEED_SIGN_MODEL_PATH.name} + {SPEED_CLASSIFIER_MODEL_PATH.name} (ONNX Runtime CPU)",
+          )
+        speed_input, speed_image = preprocess_nv12(
+          road_buf,
+          SPEED_LIMIT_MODEL_SIZE,
+          SPEED_SIGN_ROI,
+        )
+        speed_input = np.ascontiguousarray(speed_input[::-1]) * (1.0 / 255.0)
+        speed_sign_candidates = decode_speed_sign_yolov8(speed_sign_detector.infer(speed_input))
+        speed_sign_candidates = remap_speed_sign_candidates(
+          speed_sign_candidates,
+          speed_image.shape[1],
+          speed_image.shape[0],
+        )
+        speed_limit_detections = classify_speed_limit_candidates(
+          np.ascontiguousarray(speed_image[:, :, ::-1]),
+          speed_sign_candidates,
+          speed_sign_classifier.infer,
+        )
+        speed_limit_detections = project_speed_limit_detections(speed_limit_detections)
+        speed_limit = speed_limit_tracker.update(speed_limit_detections, now)
+
       execution_time = time.perf_counter() - started
       event_param = PERCEPTION_EVENT_PARAM.get(observation.event)
       voice_enabled = (
@@ -240,20 +359,49 @@ def main() -> None:
         and params.get_bool(event_param)
       )
       event_id = time.monotonic_ns() if voice_enabled and observation.voice_eligible else 0
+      speed_limit_overspeed = (
+        speed_limit.limit_kph is not None
+        and (
+          car_state.vEgo * 3.6 > speed_limit.limit_kph + 3.0
+          or (
+            car_state.cruiseState.enabled
+            and car_state.cruiseState.speed * 3.6 > speed_limit.limit_kph + 3.0
+          )
+        )
+      )
+      speed_limit_event_id = (
+        time.monotonic_ns()
+        if (
+          event_id == 0
+          and speed_limit.announce
+          and params.get_bool("RoadSpeedLimitVoiceEnabled")
+        )
+        else 0
+      )
+      if speed_limit_event_id:
+        speed_limit_tracker.mark_announced(speed_limit, now)
+      output_camera = "road" if speed_limit_event_id else camera_source
+      output_frame_id = road_client.frame_id if speed_limit_event_id else camera_client.frame_id
 
       msg = messaging.new_message("customReservedRawData0", valid=True)
       msg.customReservedRawData0 = serialize_observation(
-        camera_client.frame_id,
+        output_frame_id,
         execution_time,
         observation,
         detections,
         event_id,
-        camera_source,
+        output_camera,
+        speed_limit,
+        speed_limit_detections,
+        speed_limit_event_id,
+        speed_limit_overspeed,
       )
       pm.send("customReservedRawData0", msg)
     except Exception:
       cloudlog.exception("road perception inference failed")
       detector = None
+      speed_sign_detector = None
+      speed_sign_classifier = None
       time.sleep(2.0)
 
 

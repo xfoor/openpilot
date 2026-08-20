@@ -28,3 +28,40 @@ DEV=QCOM IMAGE=1 FLOAT16=1 NOLOCALS=1 JIT_BATCH_SIZE=0 OPENPILOT_HACKS=1 \
 The road observer only uses COCO person, bicycle, and traffic-light classes.
 Model detections are filtered by confidence, position, and temporal
 confirmation before they can become an advisory voice prompt.
+
+## Speed-limit model
+
+`speed_sign_yolov8n.onnx` is a static raw-head ONNX export of the nano
+detector from `Ayaan-Ali-Khan/Traffic-Signs-Detection`. It locates candidate
+speed signs but does not decide the number. `speed_sign_classifier.onnx` is a
+static export of the 197k-parameter GTSRB classifier from
+`Ayaan-Ali-Khan/GTSRB`; it reads each detector crop and rejects non-speed
+classes.
+
+- Original detector PyTorch SHA-256:
+  `49880ef1f751ebb714247ade08cdcb1d1772a55e3a5d7d43235fc937055e0c0b`
+- Packaged detector ONNX SHA-256:
+  `24f9adcba720df18048bf5a2611e68f3a394806ccebe6c9fabbeac7c3eef8237`
+- Original classifier H5 SHA-256:
+  `376f99703f76eb981d2934bffa705f91380a7acf33401835c087b87730109673`
+- Packaged classifier ONNX SHA-256:
+  `890426119a7afeee4e5a4f790756973d6e5abe26b10afd73cda859842cc149e8`
+- Detector source:
+  `https://github.com/Ayaan-Ali-Khan/Traffic-Signs-Detection`
+- Classifier source: `https://github.com/Ayaan-Ali-Khan/GTSRB`
+- Source repositories license: MIT
+
+The model is not trusted from a single image. A spatial track, temporal vote,
+minimum confidence, and approaching-sign size growth are required before an
+advisory can be emitted. See `docs/ROAD_OBSERVER.md` for replay limitations and
+the no-actuation boundary.
+
+Bounding-box distribution decoding, candidate suppression, crop resizing, and
+detector/classifier confidence fusion run in NumPy after inference. Keeping
+detection-head decoding out of the graph avoids a Qualcomm compiler failure in
+the exported YOLOv8 head. Both sign models run in the vendored ONNX Runtime CPU
+backend, so they do not occupy the Qualcomm accelerator used by openpilot's
+driving model. The detector is limited to two CPU threads; its median inference
+time on the comma 4 is about 162 ms. The classifier takes about 4 ms. The
+detector uses a 256x256 direct NV12 crop of the right roadside to preserve sign
+pixels without spending the device budget on the sky, hood, or far-left scene.

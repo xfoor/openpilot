@@ -24,6 +24,7 @@ from openpilot.selfdrive.road_observer.perception import (
 from openpilot.common.transformations.camera import get_view_frame_from_calib_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 from openpilot.selfdrive.road_observer.roadperceptionmodeld import camera_calibration_rpy, serialize_observation
+from openpilot.selfdrive.road_observer.speed_limit import SpeedLimitObservation
 
 
 class FakeVisionBuf:
@@ -84,6 +85,18 @@ def test_preprocess_nv12_returns_padded_bgr_input():
   assert image.shape == (8, 8, 3)
   assert image[0, 0, 2] > image[0, 0, 1]
   assert image[0, 0, 2] > image[0, 0, 0]
+
+
+def test_preprocess_nv12_crops_before_resizing():
+  model_input, image = preprocess_nv12(
+    FakeVisionBuf(),
+    model_size=8,
+    image_roi=(0.5, 0.0, 1.0, 1.0),
+  )
+
+  assert model_input.shape == (3, 8, 8)
+  assert image.shape == (8, 4, 3)
+  assert np.all(model_input[:, :, 4:] == 114)
 
 
 def test_decode_yolox_keeps_relevant_class():
@@ -342,6 +355,16 @@ def test_perception_prompt_parser():
   assert alert.prompt == 17
   assert alert.event_id == 123
   assert alert.confidence == pytest.approx(0.82)
+
+
+def test_speed_limit_prompt_parser_carries_limit_and_overspeed():
+  alert = get_perception_alert(
+    b'{"event":"speedLimit","voice":true,"eventId":456,"confidence":0.88,"speedLimit":{"limitKph":70,"overspeed":true}}',
+  )
+
+  assert alert.prompt == 18
+  assert alert.speed_limit_kph == 70
+  assert alert.overspeed
   assert get_perception_prompt(b'{"event":"trafficLightRed","voice":true}') == 0
   assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":false}') == 0
   assert get_perception_prompt(b'not-json') == 0
@@ -362,6 +385,37 @@ def test_serialized_junction_alert_keeps_radio_event_and_direction():
   assert alert.prompt == 17
   assert alert.event_id == 987
   assert alert.confidence == pytest.approx(0.84)
+
+
+def test_serialized_speed_limit_alert_keeps_dynamic_value():
+  observation = SceneObservation(SceneEvent.NONE, 0.0, False)
+  speed_limit = SpeedLimitObservation(
+    limit_kph=80,
+    confidence=0.91,
+    confirmed=True,
+    announce=True,
+    track_id=3,
+    reason="multiFrameAgreement",
+  )
+
+  raw = serialize_observation(
+    42,
+    0.12,
+    observation,
+    [],
+    0,
+    "road",
+    speed_limit=speed_limit,
+    speed_limit_event_id=988,
+    speed_limit_overspeed=True,
+  )
+  alert = get_perception_alert(raw)
+
+  assert alert.prompt == 18
+  assert alert.event_id == 988
+  assert alert.confidence == pytest.approx(0.91)
+  assert alert.speed_limit_kph == 80
+  assert alert.overspeed
 
 
 def test_wide_camera_calibration_composes_camera_and_road_rotations():

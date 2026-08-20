@@ -821,3 +821,10 @@ msgstr ""
 msgid "Reboot Device"
 msgstr ""
 
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Speed limit sign detection (beta)"
+msgstr ""
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Speed limit voice alerts"
+msgstr ""

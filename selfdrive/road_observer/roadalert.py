@@ -23,11 +23,14 @@ PROMPT_PHRASES = {
   5: "drowsiness",
   6: "restRecommended",
   7: "restRequired",
+  8: "pedestrian",
+  9: "cyclist",
   13: "curveAcceleration",
   14: "leadPullAway",
   15: "crossTraffic",
   16: "junctionVehicleLeft",
   17: "junctionVehicleRight",
+  18: "speedLimit",
 }
 
 PROMPT_PRIORITIES = {
@@ -38,11 +41,14 @@ PROMPT_PRIORITIES = {
   5: 3,
   6: 1,
   7: 2,
+  8: 3,
+  9: 3,
   13: 2,
   14: 1,
   15: 3,
   16: 3,
   17: 3,
+  18: 2,
 }
 
 
@@ -83,9 +89,11 @@ class AlertEvent:
   confidence: float
   created_at: float
   expires_at: float
+  speed_limit_kph: int | None = None
+  overspeed: bool = False
 
   def payload(self, now: float) -> dict[str, Any]:
-    return {
+    payload = {
       "eventId": self.event_id,
       "prompt": self.prompt,
       "phrase": self.phrase,
@@ -93,6 +101,10 @@ class AlertEvent:
       "confidence": round(self.confidence, 3),
       "expiresInMs": max(0, round((self.expires_at - now) * 1000)),
     }
+    if self.speed_limit_kph is not None:
+      payload["speedLimitKph"] = self.speed_limit_kph
+      payload["overspeed"] = self.overspeed
+    return payload
 
 
 class AlertBroker:
@@ -104,9 +116,18 @@ class AlertBroker:
     self.condition = threading.Condition()
     self.latest_gps: dict[str, Any] | None = None
 
-  def publish(self, event_id: int, prompt: int, confidence: float, now: float | None = None) -> bool:
+  def publish(self, event_id: int, prompt: int, confidence: float, now: float | None = None,
+              speed_limit_kph: int | None = None, overspeed: bool = False) -> bool:
     phrase = PROMPT_PHRASES.get(prompt)
-    if event_id <= 0 or phrase is None or not math.isfinite(confidence):
+    valid_metadata = (
+      (
+        speed_limit_kph in (20, 30, 50, 60, 70, 80, 100, 120)
+        and isinstance(overspeed, bool)
+      )
+      if prompt == 18
+      else speed_limit_kph is None and overspeed is False
+    )
+    if event_id <= 0 or phrase is None or not math.isfinite(confidence) or not valid_metadata:
       return False
     created_at = time.monotonic() if now is None else now
     event = AlertEvent(
@@ -117,6 +138,8 @@ class AlertBroker:
       confidence=float(confidence),
       created_at=created_at,
       expires_at=created_at + ALERT_TTL_SECONDS,
+      speed_limit_kph=speed_limit_kph,
+      overspeed=overspeed,
     )
     with self.condition:
       if any(existing.event_id == event_id for existing in self.events):

@@ -874,3 +874,11 @@ msgstr "Avvisi vocali ciclisti"
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Traffic-light voice alerts"
 msgstr "Avvisi vocali semafori"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Speed limit sign detection (beta)"
+msgstr "Rilevamento cartelli di velocità (beta)"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Speed limit voice alerts"
+msgstr "Avvisi vocali limiti di velocità"

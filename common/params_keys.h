@@ -123,6 +123,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"RoadPerceptionPedestrianEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadPerceptionTrafficLightEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadPerceptionVoiceEnabled", {PERSISTENT, BOOL, "0"}},
+    {"RoadSpeedLimitEnabled", {PERSISTENT, BOOL, "0"}},
+    {"RoadSpeedLimitVoiceEnabled", {PERSISTENT, BOOL, "1"}},
     {"SecOCKey", {PERSISTENT | DONT_LOG, STRING}},
     {"ShowDebugInfo", {PERSISTENT, BOOL}},
     {"RouteCount", {PERSISTENT, INT, "0"}},

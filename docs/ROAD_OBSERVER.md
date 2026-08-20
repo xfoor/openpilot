@@ -8,12 +8,12 @@ connection.
 
 - `Guarda la strada.` when driver monitoring sees sustained distraction, before
   or at the first stock attention alert.
-- `Il veicolo davanti è partito.` after a confirmed stop when the tracked lead
+- `Il veicolo davanti è ripartito.` after a confirmed stop when the tracked lead
   vehicle moves away.
-- `Attenzione, il veicolo davanti sta frenando.` when a close, confidently
+- `Attenzione, il veicolo davanti frena.` when a close, confidently
   tracked lead decelerates for at least half a second and the driver has not
   started braking.
-- `Attenzione, traffico in rallentamento.` after sustained rapid closing on a
+- `Attenzione, il traffico rallenta.` after sustained rapid closing on a
   tracked lead vehicle.
 - `Sembri stanco. Fermati appena possibile.` after the driver model reports
   sustained sleep probability while the car is moving.
@@ -31,6 +31,10 @@ connection.
   pulls away for at least one second but factory ACC is not matching it.
 - `Controlla a sinistra: c'è un veicolo.` or `Controlla a destra: c'è un
   veicolo.` for a confirmed side-vehicle risk during a low-speed turn.
+- `Controlla il limite di velocità.` on Comma after a speed-limit sign is
+  confirmed. When the radio is connected, its neural voice announces the
+  detected number and tells the driver to reduce speed if the current speed or
+  factory-ACC set speed is more than 3 km/h above it.
 
 Stock openpilot alerts always have audio priority. The observer is enabled by
 default on this branch and can be disabled in Settings under
@@ -70,6 +74,22 @@ Traffic-light observations are therefore hard-blocked from `soundd`, even if a
 raw observation incorrectly carries a voice flag. They remain shadow
 diagnostics for developing a dedicated signal model and lane association.
 
+Speed-limit recognition runs independently on the road camera as a two-stage
+pipeline: a 256x256 nano detector scans a direct high-resolution crop of the
+right roadside and a small GTSRB classifier reads each candidate sign. These
+two models run on a two-thread CPU backend so they do not compete with the
+Qualcomm accelerator used by openpilot's driving model. A reading must stay on
+the same spatial track for at least two sampled frames over 0.4 seconds,
+include a strong classifier result, have a sufficiently large and growing sign
+box, and win a confidence-weighted vote before it can be announced.
+Single-frame readings are discarded. Supported limits are 20, 30, 50, 60, 70,
+80, 100, and 120 km/h; end-of-limit and other sign classes produce no limit.
+
+This feature is advisory-only. It does not write a cruise set speed, press
+virtual steering-wheel buttons, accelerate, brake, or send CAN messages. A
+driver may use the spoken value to change the factory ACC setting with the
+physical controls after verifying the sign.
+
 `Road scene detection (beta)` and `Road scene voice alerts (beta)` are disabled
 by default. Junction, pedestrian, and cyclist voice switches are independent
 under that master. Enable scene detection while parked for device validation,
@@ -77,6 +97,8 @@ then enable only the required event classes. When enabled, structured
 observations are published in `customReservedRawData0`, including a unique
 voice event ID, selected camera, side, track ID, projected distance, path
 offset, lateral speed, recent-side-check result, and qualification reason.
+`Speed limit sign detection (beta)` is a separate switch and is disabled by
+default. Its voice switch is independent of the road-scene voice master.
 
 An offline screen of 191 retained Slovenia urban frames produced 33 compiled
 person detections and two traffic-light candidates. The compiled model's median
@@ -107,6 +129,14 @@ The curve and lead-pull-away rules only run when the vehicle uses factory ACC;
 they do not request acceleration or braking. An 18 August 2026 replay covering
 about 80 minutes produced three curve advisories, including both reviewed
 roundabout accelerations, and two lead-pull-away advisories.
+
+A 974-frame, 1 Hz screen of the retained 19 August drive showed that individual
+single-stage speed-sign frames can be wrong. Focused 4 Hz full-resolution
+replay of three visible sign sequences showed that separating detection from
+classification read the sustained signs as 50, 70, and 50 km/h. That evidence
+is why automatic cruise-speed changes are hard-blocked and multi-frame
+confirmation is mandatory. At the production 2 Hz sampling rate, a sign that is
+detectable for less than half a second can be missed.
 
 The driving clocks count time above 1 m/s and persist across ignition cycles.
 A stationary period of 15 minutes resets the two-hour health reminder. A
@@ -145,6 +175,8 @@ braking, acceleration, or engagement.
 
 RoadTalk protocol 2 makes the radio's packaged neural Italian voice the primary
 speech channel. Every event is authenticated and expires after five seconds.
+The packaged prompts use Azure AI Speech's Italian Isabella Dragon HD neural
+voice as 48 kHz mono PCM and require no cloud connection while driving.
 When the radio reports that audio is ready, `soundd` waits up to 300 ms for the
 radio's playback acknowledgement. A missing acknowledgement immediately falls
 back to the matching packaged neural voice on Comma; Android system TTS is a
@@ -185,10 +217,11 @@ user explicitly asks it to analyze the road ahead.
 The observer only publishes advisory messages to `soundd`. It never writes CAN,
 changes steering, applies braking, or changes openpilot engagement.
 
-On the tested Volkswagen Golf Mk7, openpilot longitudinal control is
-unsupported. The observer cannot apply a gentle brake or regulate road speed
-while openpilot is disengaged; braking remains the responsibility of the driver
-and the vehicle's stock ACC/AEB systems.
+On the tested Volkswagen Golf Mk7.5 configuration, the vehicle's factory radar
+ACC supplies longitudinal control while openpilot supplies lateral control.
+The observer does not replace or override factory ACC and cannot apply a gentle
+brake or regulate road speed; braking and speed selection remain the
+responsibility of the driver and the vehicle's stock ACC/AEB systems.
 
 The detector is not safety-certified, does not see outside the camera field of
 view, can miss or misclassify objects, and can select a traffic light belonging
@@ -197,7 +230,7 @@ connectivity and cloud latency are unsuitable for time-critical road warnings.
 Do not act on a spoken traffic-light color without verifying it visually, and
 do not treat this observer as a substitute for an attentive driver.
 
-The COCO perception model does not detect or read European speed-limit signs.
-Speed-limit voice warnings require a separately validated sign-recognition or
-offline map-matching source. No speed-limit value was present in the archived
-navigation, map, or Golf CAN signals.
+Speed-limit recognition can miss, misread, or announce a sign for a side road.
+It can also miss signs shown only on the far left. It is not a legal-speed
+authority and has no map-based confirmation in the current build. The driver
+must verify every announced limit.

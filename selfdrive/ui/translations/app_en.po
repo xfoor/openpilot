@@ -823,3 +823,10 @@ msgstr "✓ SUBSCRIBED"
 msgid "🔥 Firehose Mode 🔥"
 msgstr "🔥 Firehose Mode 🔥"
 
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Speed limit sign detection (beta)"
+msgstr "Speed limit sign detection (beta)"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Speed limit voice alerts"
+msgstr "Speed limit voice alerts"

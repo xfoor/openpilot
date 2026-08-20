@@ -68,6 +68,7 @@ observer_sound_list: dict[int, str] = {
   15: "observer_cross_traffic_it.wav",
   16: "observer_junction_left_it.wav",
   17: "observer_junction_right_it.wav",
+  18: "observer_speed_limit_it.wav",
 }
 
 if HARDWARE.get_device_type() == "tizi":

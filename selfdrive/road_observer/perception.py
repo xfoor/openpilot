@@ -31,6 +31,7 @@ class SceneEvent(enum.StrEnum):
   PEDESTRIAN_RISK = "pedestrianRisk"
   CYCLIST_RISK = "cyclistRisk"
   CROSS_TRAFFIC_RISK = "crossTrafficRisk"
+  SPEED_LIMIT = "speedLimit"
   TRAFFIC_LIGHT_RED = "trafficLightRed"
   TRAFFIC_LIGHT_YELLOW = "trafficLightYellow"
   TRAFFIC_LIGHT_GREEN = "trafficLightGreen"
@@ -39,6 +40,7 @@ class SceneEvent(enum.StrEnum):
 PERCEPTION_PROMPT_MAP = {
   SceneEvent.PEDESTRIAN_RISK.value: 8,
   SceneEvent.CYCLIST_RISK.value: 9,
+  SceneEvent.SPEED_LIMIT.value: 18,
 }
 
 JUNCTION_PROMPT_MAP = {
@@ -50,6 +52,7 @@ PERCEPTION_EVENT_PARAM = {
   SceneEvent.PEDESTRIAN_RISK: "RoadPerceptionPedestrianEnabled",
   SceneEvent.CYCLIST_RISK: "RoadPerceptionCyclistEnabled",
   SceneEvent.CROSS_TRAFFIC_RISK: "RoadPerceptionJunctionEnabled",
+  SceneEvent.SPEED_LIMIT: "RoadSpeedLimitVoiceEnabled",
 }
 
 
@@ -58,6 +61,8 @@ class PerceptionAlert:
   prompt: int = 0
   event_id: int = 0
   confidence: float = 0.0
+  speed_limit_kph: int | None = None
+  overspeed: bool = False
 
 
 def get_perception_alert(raw_data) -> PerceptionAlert:
@@ -77,6 +82,20 @@ def get_perception_alert(raw_data) -> PerceptionAlert:
   )
   event_id = payload.get("eventId", 0)
   confidence = payload.get("confidence", 0.0)
+  speed_limit_kph = None
+  overspeed = False
+  if event == SceneEvent.SPEED_LIMIT.value:
+    speed_limit = payload.get("speedLimit")
+    if not isinstance(speed_limit, dict):
+      return PerceptionAlert()
+    speed_limit_kph = speed_limit.get("limitKph")
+    overspeed = speed_limit.get("overspeed", False)
+    if (
+      not isinstance(speed_limit_kph, int)
+      or speed_limit_kph not in (20, 30, 50, 60, 70, 80, 100, 120)
+      or not isinstance(overspeed, bool)
+    ):
+      return PerceptionAlert()
   if (
     not isinstance(event_id, int)
     or event_id < 0
@@ -84,7 +103,11 @@ def get_perception_alert(raw_data) -> PerceptionAlert:
     or not math.isfinite(confidence)
   ):
     return PerceptionAlert()
-  return PerceptionAlert(prompt, event_id, float(confidence)) if prompt else PerceptionAlert()
+  return (
+    PerceptionAlert(prompt, event_id, float(confidence), speed_limit_kph, overspeed)
+    if prompt
+    else PerceptionAlert()
+  )
 
 
 def get_perception_prompt(raw_data) -> int:
@@ -346,19 +369,36 @@ class DetectionTracker:
     return tracked
 
 
-def preprocess_nv12(buf, model_size: int = MODEL_SIZE) -> tuple[np.ndarray, np.ndarray]:
+def preprocess_nv12(
+  buf,
+  model_size: int = MODEL_SIZE,
+  image_roi: tuple[float, float, float, float] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
   """Resize an NV12 VisionBuf directly into a padded BGR model image."""
-  ratio = min(model_size / buf.width, model_size / buf.height)
-  resized_w = max(1, int(buf.width * ratio))
-  resized_h = max(1, int(buf.height * ratio))
+  roi_x1, roi_y1, roi_x2, roi_y2 = image_roi or (0.0, 0.0, 1.0, 1.0)
+  source_left = int(np.clip(roi_x1 * buf.width, 0, buf.width - 2))
+  source_top = int(np.clip(roi_y1 * buf.height, 0, buf.height - 2))
+  source_right = int(np.clip(math.ceil(roi_x2 * buf.width), source_left + 2, buf.width))
+  source_bottom = int(np.clip(math.ceil(roi_y2 * buf.height), source_top + 2, buf.height))
+  source_width = source_right - source_left
+  source_height = source_bottom - source_top
+  ratio = min(model_size / source_width, model_size / source_height)
+  resized_w = max(1, int(source_width * ratio))
+  resized_h = max(1, int(source_height * ratio))
 
   raw = np.frombuffer(buf.data, dtype=np.uint8)
   y_plane = raw[:buf.uv_offset].reshape((-1, buf.stride))
   uv_height = ((buf.height // 2) + 15) // 16 * 16
   uv_plane = raw[buf.uv_offset:buf.uv_offset + buf.stride * uv_height].reshape((-1, buf.stride))
 
-  xs = np.minimum((np.arange(resized_w) / ratio).astype(np.int32), buf.width - 1)
-  ys = np.minimum((np.arange(resized_h) / ratio).astype(np.int32), buf.height - 1)
+  xs = np.minimum(
+    source_left + (np.arange(resized_w) / ratio).astype(np.int32),
+    source_right - 1,
+  )
+  ys = np.minimum(
+    source_top + (np.arange(resized_h) / ratio).astype(np.int32),
+    source_bottom - 1,
+  )
 
   y = y_plane[ys[:, None], xs[None, :]].astype(np.int32)
   uv_xs = (xs // 2) * 2

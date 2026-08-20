@@ -404,6 +404,8 @@ def _collect_alerts_and_gps(alerts: AlertBroker) -> None:
         perception_alert.event_id,
         perception_alert.prompt,
         perception_alert.confidence,
+        speed_limit_kph=perception_alert.speed_limit_kph,
+        overspeed=perception_alert.overspeed,
       )
 
     if sm.updated["gpsLocationExternal"]:
