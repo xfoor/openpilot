@@ -29,6 +29,8 @@ connection.
   for at least half a second in a tight, low-speed curve without a pedal input.
 - `Il veicolo davanti si sta allontanando.` when a confidently tracked lead
   pulls away for at least one second but factory ACC is not matching it.
+- `Controlla a sinistra: c'è un veicolo.` or `Controlla a destra: c'è un
+  veicolo.` for a confirmed side-vehicle risk during a low-speed turn.
 
 Stock openpilot alerts always have audio priority. The observer is enabled by
 default on this branch and can be disabled in Settings under
@@ -36,24 +38,31 @@ default on this branch and can be disabled in Settings under
 
 ## Local road perception
 
-`roadperceptionmodeld` samples the road camera at 2 Hz and runs a compiled
-YOLOX-Nano 320x320 COCO model locally on the comma 4 Qualcomm backend. It keeps
-person, bicycle, vehicle, and traffic-light detections and applies class-aware
-NMS. Pedestrian, cyclist, car, motorcycle, bus, and truck boxes are tracked
-across frames. Their ground contact points are projected through the comma's
-live camera calibration and compared with the future path already produced by
-openpilot's driving model. A pedestrian or cyclist warning requires either
-repeated occupancy of that path or tracked lateral motion that would enter it
-within 2.5 seconds and inside the speed-dependent warning distance. If
-calibration, camera identity, or the future path is unavailable, no pedestrian
-or cyclist voice prompt is eligible.
+`roadperceptionmodeld` samples a camera at 2 Hz and runs a compiled YOLOX-Nano
+320x320 COCO model locally on the comma 4 Qualcomm backend. It normally uses
+the road camera, then switches to the wide road camera below 15 m/s while a
+turn signal is active or steering exceeds 25 degrees. It keeps person, bicycle,
+vehicle, and traffic-light detections and applies class-aware NMS. Pedestrian,
+cyclist, car, motorcycle, bus, and truck boxes are tracked across frames. Their
+ground contact points are projected through the selected camera's live
+calibration and compared with the future path already produced by openpilot's
+driving model.
 
-Vehicles moving toward the driven path during a signalled or strongly steered
-turn are recorded as cross-traffic shadow observations. They never produce
-speech in this release. The road camera does not reliably cover every approach
-at a junction, so cross-traffic speech remains blocked until wide-camera
-geometry and positive/negative junction replay establish useful recall without
-excess false alerts.
+A pedestrian or cyclist warning requires either repeated occupancy of that
+path or tracked lateral motion that would enter it within 2.5 seconds and
+inside the speed-dependent warning distance. A moving side vehicle must be
+tracked for three frames, move toward the path by at least 0.8 m/s, and reach
+the path within three seconds. A stationary side-vehicle reminder is more
+restricted: wide camera, active turn signal, at most 6 m/s, four frames,
+confidence of at least 0.72, within 18 metres and 7 metres of the path, no
+recent driver check of that side, and a confident look toward the opposite
+side within 1.5 seconds. Moving path conflicts remain eligible regardless of
+gaze. If calibration, camera identity, or the future path is unavailable, no
+road-user or junction voice prompt is eligible.
+
+Junction speech reports the side where a vehicle was observed. It does not
+claim that the vehicle is waiting, approaching, or legally has priority. The
+driver must verify the scene and right-of-way.
 
 Traffic-light color is estimated only inside a confirmed traffic-light crop.
 It does not infer which traffic light legally controls the current lane.
@@ -61,12 +70,13 @@ Traffic-light observations are therefore hard-blocked from `soundd`, even if a
 raw observation incorrectly carries a voice flag. They remain shadow
 diagnostics for developing a dedicated signal model and lane association.
 
-`Road scene detection (beta)` and `Pedestrian and cyclist voice alerts (beta)`
-are disabled by default. Enable scene detection while parked for device
-validation, then enable voice only after reviewing local drives for false
-positives and missed crossings. When enabled, structured shadow-mode
-observations are published in `customReservedRawData0`, including track ID,
-projected distance, path offset, lateral speed, and the reason a risk qualified.
+`Road scene detection (beta)` and `Road scene voice alerts (beta)` are disabled
+by default. Junction, pedestrian, and cyclist voice switches are independent
+under that master. Enable scene detection while parked for device validation,
+then enable only the required event classes. When enabled, structured
+observations are published in `customReservedRawData0`, including a unique
+voice event ID, selected camera, side, track ID, projected distance, path
+offset, lateral speed, recent-side-check result, and qualification reason.
 
 An offline screen of 191 retained Slovenia urban frames produced 33 compiled
 person detections and two traffic-light candidates. The compiled model's median
@@ -78,12 +88,20 @@ pedestrian-crossing recall measurement. Traffic-light speech remains disabled
 until a signal-specific model and lane-association strategy pass broader
 positive and negative replay.
 
+For the 18 August junction reviewed after road testing, the narrow road camera
+lost side coverage while the wide camera retained both approaches. The exact
+compiled QCOM model detected vehicles in 14 of 16 retained one-second
+wide-camera frames around the stop line. Steady inference took 32–40 ms after a
+2.5–3.8-second first-load warmup. This validates camera coverage and detector
+visibility for that event, but not universal junction recall.
+
 Settings also provide individual switches for driver-attention, lead-vehicle,
 lead-braking, slowing-traffic, driver-health, curve-acceleration,
-lead-pull-away, pedestrian, and cyclist announcements. Turning off the
-perception voice master prevents pedestrian and cyclist announcements without
-disabling stock openpilot safety sounds. Turning off Italian road observer
-separately prevents driver, lead, and traffic announcements from this observer.
+lead-pull-away, junction-vehicle, pedestrian, and cyclist announcements.
+Turning off the perception voice master prevents all three perception
+announcement classes without disabling stock openpilot safety sounds. Turning
+off Italian road observer separately prevents driver and lead announcements
+from this observer.
 
 The curve and lead-pull-away rules only run when the vehicle uses factory ACC;
 they do not request acceleration or braking. An 18 August 2026 replay covering
@@ -125,13 +143,14 @@ road video. It binds to the comma four's private Wi-Fi interface and never
 exposes CAN, shell, process control, arbitrary parameter writes, steering,
 braking, acceleration, or engagement.
 
-RoadTalk protocol 2 makes the radio's offline Italian TTS the primary speech
-channel. Every event is authenticated and expires after five seconds. When the
-radio reports that audio is ready, `soundd` waits up to 300 ms for the radio's
-playback acknowledgement. A missing acknowledgement immediately falls back to
-the local Comma sound; stock openpilot safety alerts always remain local and
-always take priority. The companion also records journeys locally from Comma
-GPS, falls back to recent radio GPS, and can export a GeoJSON trace.
+RoadTalk protocol 2 makes the radio's packaged neural Italian voice the primary
+speech channel. Every event is authenticated and expires after five seconds.
+When the radio reports that audio is ready, `soundd` waits up to 300 ms for the
+radio's playback acknowledgement. A missing acknowledgement immediately falls
+back to the matching packaged neural voice on Comma; Android system TTS is a
+last fallback on the radio. Stock openpilot safety alerts always remain local
+and always take priority. The companion also records journeys locally from
+Comma GPS, falls back to recent radio GPS, and can export a GeoJSON trace.
 
 Pair while parked:
 

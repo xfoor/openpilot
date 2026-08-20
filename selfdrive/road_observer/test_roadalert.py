@@ -50,3 +50,14 @@ def test_radio_readiness_expires(tmp_path):
 
   assert radio_audio_ready(now=101.0, ready_path=broker.ready_path)
   assert not radio_audio_ready(now=103.0, ready_path=broker.ready_path)
+
+
+def test_directional_junction_alert_is_available_to_radio(tmp_path):
+  broker = AlertBroker(tmp_path)
+
+  assert broker.publish(321, 17, 0.88, now=10.0)
+  event = broker.next_event(after=0, wait_seconds=0.0, now_fn=lambda: 10.1)
+
+  assert event is not None
+  assert event.phrase == "junctionVehicleRight"
+  assert event.priority == 3

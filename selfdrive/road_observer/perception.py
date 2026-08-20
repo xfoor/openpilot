@@ -41,21 +41,66 @@ PERCEPTION_PROMPT_MAP = {
   SceneEvent.CYCLIST_RISK.value: 9,
 }
 
+JUNCTION_PROMPT_MAP = {
+  "left": 16,
+  "right": 17,
+}
+
 PERCEPTION_EVENT_PARAM = {
   SceneEvent.PEDESTRIAN_RISK: "RoadPerceptionPedestrianEnabled",
   SceneEvent.CYCLIST_RISK: "RoadPerceptionCyclistEnabled",
+  SceneEvent.CROSS_TRAFFIC_RISK: "RoadPerceptionJunctionEnabled",
 }
 
 
-def get_perception_prompt(raw_data) -> int:
+@dataclass(frozen=True)
+class PerceptionAlert:
+  prompt: int = 0
+  event_id: int = 0
+  confidence: float = 0.0
+
+
+def get_perception_alert(raw_data) -> PerceptionAlert:
   try:
     payload = json.loads(bytes(raw_data))
   except (TypeError, ValueError, UnicodeDecodeError):
-    return 0
+    return PerceptionAlert()
 
-  if not payload.get("voice", False):
-    return 0
-  return PERCEPTION_PROMPT_MAP.get(payload.get("event"), 0)
+  if not isinstance(payload, dict) or not payload.get("voice", False):
+    return PerceptionAlert()
+
+  event = payload.get("event")
+  prompt = (
+    JUNCTION_PROMPT_MAP.get(payload.get("side"), 0)
+    if event == SceneEvent.CROSS_TRAFFIC_RISK.value
+    else PERCEPTION_PROMPT_MAP.get(event, 0)
+  )
+  event_id = payload.get("eventId", 0)
+  confidence = payload.get("confidence", 0.0)
+  if (
+    not isinstance(event_id, int)
+    or event_id < 0
+    or not isinstance(confidence, (int, float))
+    or not math.isfinite(confidence)
+  ):
+    return PerceptionAlert()
+  return PerceptionAlert(prompt, event_id, float(confidence)) if prompt else PerceptionAlert()
+
+
+def get_perception_prompt(raw_data) -> int:
+  return get_perception_alert(raw_data).prompt
+
+
+def classify_driver_gaze(yaw: float, face_detected: bool, uncertainty: float) -> str | None:
+  if (
+    not face_detected
+    or not math.isfinite(yaw)
+    or not math.isfinite(uncertainty)
+    or uncertainty > math.radians(15.0)
+    or abs(yaw) < math.radians(18.0)
+  ):
+    return None
+  return "left" if yaw < 0.0 else "right"
 
 
 @dataclass(frozen=True)
@@ -75,6 +120,8 @@ class SceneObservation:
   distance: float | None = None
   path_offset: float | None = None
   lateral_speed: float | None = None
+  side: str | None = None
+  driver_checked_side: bool = False
 
 
 @dataclass(frozen=True)
@@ -452,12 +499,20 @@ def classify_traffic_light(image_bgr: np.ndarray, bbox: tuple[float, float, floa
 class SceneInterpreter:
   CONFIRMATIONS = 3
   EVENT_COOLDOWN = 8.0
+  SIDE_CHECK_MEMORY = 3.0
+  OPPOSITE_FOCUS_WINDOW = 1.5
 
   def __init__(self):
     self.tracker = DetectionTracker()
     self.candidate = SceneEvent.NONE
     self.candidate_count = 0
-    self.last_spoken_at = dict.fromkeys(SceneEvent, -math.inf)
+    self.last_spoken_at: dict[tuple[SceneEvent, str | None], float] = {}
+    self.last_side_checked_at = {"left": -math.inf, "right": -math.inf}
+    self.camera_source: str | None = None
+
+  def note_driver_gaze(self, side: str | None, now: float) -> None:
+    if side in self.last_side_checked_at:
+      self.last_side_checked_at[side] = now
 
   @staticmethod
   def _warning_distance(ego_speed: float) -> float:
@@ -508,9 +563,9 @@ class SceneInterpreter:
       lateral_speed=tracked.lateral_speed,
     )
 
-  @staticmethod
-  def _vehicle_observation(tracked: TrackedDetection, ego_speed: float,
-                           warning_distance: float, turning: bool) -> SceneObservation | None:
+  def _vehicle_observation(self, tracked: TrackedDetection, ego_speed: float,
+                           warning_distance: float, turning: bool, turn_signal: bool,
+                           camera_source: str, now: float) -> SceneObservation | None:
     if (
       not turning
       or tracked.detection.class_id not in VEHICLE_CLASSES
@@ -524,27 +579,57 @@ class SceneInterpreter:
     ):
       return None
 
+    side = "left" if tracked.path_offset > 0.0 else "right"
+    opposite_side = "right" if side == "left" else "left"
+    driver_checked_side = now - self.last_side_checked_at[side] <= self.SIDE_CHECK_MEMORY
+    driver_focused_opposite = now - self.last_side_checked_at[opposite_side] <= self.OPPOSITE_FOCUS_WINDOW
     toward_speed = -tracked.lateral_speed * math.copysign(1.0, tracked.path_offset)
-    if toward_speed < 0.8:
-      return None
-    time_to_path = (abs(tracked.path_offset) - VEHICLE_CORRIDOR_HALF_WIDTH) / toward_speed
-    distance_at_conflict = tracked.distance - ego_speed * time_to_path
-    if (
-      not 0.0 <= time_to_path <= 3.0
-      or not MIN_GROUND_DISTANCE <= distance_at_conflict <= warning_distance
-    ):
-      return None
+    if toward_speed >= 0.8:
+      time_to_path = (abs(tracked.path_offset) - VEHICLE_CORRIDOR_HALF_WIDTH) / toward_speed
+      distance_at_conflict = tracked.distance - ego_speed * time_to_path
+      if (
+        0.0 <= time_to_path <= 3.0
+        and MIN_GROUND_DISTANCE <= distance_at_conflict <= warning_distance
+      ):
+        return SceneObservation(
+          event=SceneEvent.CROSS_TRAFFIC_RISK,
+          confidence=tracked.detection.score,
+          voice_eligible=camera_source == "wide",
+          reason="movingPathConflict",
+          track_id=tracked.track_id,
+          distance=tracked.distance,
+          path_offset=tracked.path_offset,
+          lateral_speed=tracked.lateral_speed,
+          side=side,
+          driver_checked_side=driver_checked_side,
+        )
 
-    return SceneObservation(
-      event=SceneEvent.CROSS_TRAFFIC_RISK,
-      confidence=tracked.detection.score,
-      voice_eligible=False,
-      reason="shadowPathConflict",
-      track_id=tracked.track_id,
-      distance=tracked.distance,
-      path_offset=tracked.path_offset,
-      lateral_speed=tracked.lateral_speed,
+    unseen_junction_vehicle = (
+      camera_source == "wide"
+      and turn_signal
+      and ego_speed <= 6.0
+      and tracked.hits >= 4
+      and tracked.detection.score >= 0.72
+      and tracked.distance <= min(warning_distance, 18.0)
+      and abs(tracked.path_offset) <= 7.0
+      and abs(tracked.lateral_speed) <= 0.35
+      and not driver_checked_side
+      and driver_focused_opposite
     )
+    if unseen_junction_vehicle:
+      return SceneObservation(
+        event=SceneEvent.CROSS_TRAFFIC_RISK,
+        confidence=tracked.detection.score,
+        voice_eligible=True,
+        reason="uncheckedJunctionVehicle",
+        track_id=tracked.track_id,
+        distance=tracked.distance,
+        path_offset=tracked.path_offset,
+        lateral_speed=tracked.lateral_speed,
+        side=side,
+        driver_checked_side=False,
+      )
+    return None
 
   @staticmethod
   def _traffic_light_observation(detections: list[Detection],
@@ -571,7 +656,8 @@ class SceneInterpreter:
 
   def _candidate_observation(self, detections: list[Detection], image_bgr: np.ndarray,
                              ego_speed: float, now: float,
-                             geometry: RoadGeometry | None, turning: bool) -> SceneObservation:
+                             geometry: RoadGeometry | None, turning: bool,
+                             turn_signal: bool, camera_source: str) -> SceneObservation:
     warning_distance = self._warning_distance(ego_speed)
     road_users = []
     crossing_vehicles = []
@@ -581,7 +667,15 @@ class SceneInterpreter:
         if observation is not None:
           road_users.append(observation)
       else:
-        observation = self._vehicle_observation(tracked, ego_speed, warning_distance, turning)
+        observation = self._vehicle_observation(
+          tracked,
+          ego_speed,
+          warning_distance,
+          turning,
+          turn_signal,
+          camera_source,
+          now,
+        )
         if observation is not None:
           crossing_vehicles.append(observation)
 
@@ -600,8 +694,26 @@ class SceneInterpreter:
 
   def update(self, detections: list[Detection], image_bgr: np.ndarray,
              ego_speed: float, now: float,
-             geometry: RoadGeometry | None = None, turning: bool = False) -> SceneObservation:
-    observation = self._candidate_observation(detections, image_bgr, ego_speed, now, geometry, turning)
+             geometry: RoadGeometry | None = None, turning: bool = False,
+             turn_signal: bool = False, camera_source: str = "road",
+             driver_gaze_side: str | None = None) -> SceneObservation:
+    if camera_source != self.camera_source:
+      self.tracker = DetectionTracker()
+      self.candidate = SceneEvent.NONE
+      self.candidate_count = 0
+      self.camera_source = camera_source
+    self.note_driver_gaze(driver_gaze_side, now)
+
+    observation = self._candidate_observation(
+      detections,
+      image_bgr,
+      ego_speed,
+      now,
+      geometry,
+      turning,
+      turn_signal,
+      camera_source,
+    )
     if observation.event == SceneEvent.NONE:
       self.candidate = SceneEvent.NONE
       self.candidate_count = 0
@@ -621,9 +733,10 @@ class SceneInterpreter:
         reason=observation.reason,
       )
 
-    ready = now - self.last_spoken_at[observation.event] >= self.EVENT_COOLDOWN
+    cooldown_key = (observation.event, observation.side)
+    ready = now - self.last_spoken_at.get(cooldown_key, -math.inf) >= self.EVENT_COOLDOWN
     if observation.voice_eligible and ready:
-      self.last_spoken_at[observation.event] = now
+      self.last_spoken_at[cooldown_key] = now
       return observation
     return SceneObservation(
       event=observation.event,
@@ -634,4 +747,6 @@ class SceneInterpreter:
       distance=observation.distance,
       path_offset=observation.path_offset,
       lateral_speed=observation.lateral_speed,
+      side=observation.side,
+      driver_checked_side=observation.driver_checked_side,
     )

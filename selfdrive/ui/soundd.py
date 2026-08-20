@@ -10,7 +10,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.road_observer.perception import get_perception_prompt
+from openpilot.selfdrive.road_observer.perception import get_perception_alert
 from openpilot.selfdrive.road_observer.roadalert import radio_acknowledged, radio_audio_ready
 
 from openpilot.system import micd
@@ -66,6 +66,8 @@ observer_sound_list: dict[int, str] = {
   13: "observer_curve_acceleration_it.wav",
   14: "observer_lead_pull_away_it.wav",
   15: "observer_cross_traffic_it.wav",
+  16: "observer_junction_left_it.wav",
+  17: "observer_junction_right_it.wav",
 }
 
 if HARDWARE.get_device_type() == "tizi":
@@ -243,7 +245,8 @@ class Soundd:
       observer = sm['roadObserverState']
       self.update_observer_prompt(observer.prompt.raw, observer.eventId)
     if sm.updated['customReservedRawData0']:
-      self.update_observer_prompt(get_perception_prompt(sm['customReservedRawData0']))
+      perception_alert = get_perception_alert(sm['customReservedRawData0'])
+      self.update_observer_prompt(perception_alert.prompt, perception_alert.event_id)
     self.process_pending_observer()
 
   def calculate_volume(self, weighted_db):

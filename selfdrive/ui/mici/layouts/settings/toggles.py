@@ -28,9 +28,10 @@ class TogglesLayoutMici(NavScroller):
     road_observer_slowing_toggle = BigParamControl(tr("Slowing traffic voice alerts"), "RoadObserverSlowingTrafficEnabled")
     road_observer_driver_health_toggle = BigParamControl(tr("Driver health and rest alerts"), "RoadObserverDriverHealthEnabled")
     road_perception_toggle = BigParamControl(tr("Road scene detection (beta)"), "RoadPerceptionEnabled")
-    road_perception_voice_toggle = BigParamControl(tr("Pedestrian and cyclist voice alerts (beta)"), "RoadPerceptionVoiceEnabled")
+    road_perception_voice_toggle = BigParamControl(tr("Road scene voice alerts (beta)"), "RoadPerceptionVoiceEnabled")
     road_perception_pedestrian_toggle = BigParamControl(tr("Pedestrian voice alerts"), "RoadPerceptionPedestrianEnabled")
     road_perception_cyclist_toggle = BigParamControl(tr("Cyclist voice alerts"), "RoadPerceptionCyclistEnabled")
+    road_perception_junction_toggle = BigParamControl(tr("Junction vehicle voice alerts"), "RoadPerceptionJunctionEnabled")
     record_front = BigParamControl("record & upload driver camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
@@ -76,6 +77,7 @@ class TogglesLayoutMici(NavScroller):
       ("RoadPerceptionVoiceEnabled", road_perception_voice_toggle),
       ("RoadPerceptionPedestrianEnabled", road_perception_pedestrian_toggle),
       ("RoadPerceptionCyclistEnabled", road_perception_cyclist_toggle),
+      ("RoadPerceptionJunctionEnabled", road_perception_junction_toggle),
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),

@@ -26,6 +26,8 @@ PROMPT_PHRASES = {
   13: "curveAcceleration",
   14: "leadPullAway",
   15: "crossTraffic",
+  16: "junctionVehicleLeft",
+  17: "junctionVehicleRight",
 }
 
 PROMPT_PRIORITIES = {
@@ -39,6 +41,8 @@ PROMPT_PRIORITIES = {
   13: 2,
   14: 1,
   15: 3,
+  16: 3,
+  17: 3,
 }
 
 

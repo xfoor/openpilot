@@ -5,11 +5,11 @@ import numpy as np
 from cereal import car
 from cereal import messaging
 from cereal.messaging import SubMaster, PubMaster
+from openpilot.selfdrive.road_observer.perception import get_perception_alert, get_perception_prompt
 from openpilot.selfdrive.ui.soundd import (
   SELFDRIVE_STATE_TIMEOUT,
   Soundd,
   check_selfdrive_timeout_alert,
-  get_perception_prompt,
   observer_sound_list,
 )
 
@@ -111,6 +111,11 @@ class TestSoundd:
   def test_perception_prompt_requires_voice_flag(self):
     assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":false}') == 0
     assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":true}') == 8
+    alert = get_perception_alert(
+      b'{"event":"crossTrafficRisk","side":"left","voice":true,"eventId":88,"confidence":0.9}',
+    )
+    assert alert.prompt == 16
+    assert alert.event_id == 88
     assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":true}') == 0
     assert get_perception_prompt(b'not-json') == 0
 

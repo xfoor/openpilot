@@ -12,13 +12,18 @@ from openpilot.selfdrive.road_observer.perception import (
   RoadGeometry,
   SceneEvent,
   SceneInterpreter,
+  SceneObservation,
+  classify_driver_gaze,
   classify_traffic_light,
   decode_yolox,
+  get_perception_alert,
   get_perception_prompt,
   preprocess_nv12,
   remap_detections,
 )
 from openpilot.common.transformations.camera import get_view_frame_from_calib_frame
+from openpilot.common.transformations.orientation import rot_from_euler
+from openpilot.selfdrive.road_observer.roadperceptionmodeld import camera_calibration_rpy, serialize_observation
 
 
 class FakeVisionBuf:
@@ -199,7 +204,31 @@ def test_static_pedestrian_outside_path_does_not_alert():
   assert all(observation.event == SceneEvent.NONE for observation in observations)
 
 
-def test_crossing_vehicle_is_shadow_only_during_turn():
+def test_crossing_vehicle_warns_from_wide_camera_during_turn():
+  interpreter = SceneInterpreter()
+  image = np.zeros((416, 416, 3), dtype=np.uint8)
+  geometry = straight_geometry()
+
+  observations = [
+    interpreter.update(
+      [road_user_detection(14.0, lateral, class_id=COCO_CAR)],
+      image,
+      5.0,
+      index * 0.5,
+      geometry,
+      turning=True,
+      camera_source="wide",
+    )
+    for index, lateral in enumerate((3.6, 3.1, 2.6))
+  ]
+
+  assert observations[-1].event == SceneEvent.CROSS_TRAFFIC_RISK
+  assert observations[-1].voice_eligible
+  assert observations[-1].reason == "movingPathConflict"
+  assert observations[-1].side == "left"
+
+
+def test_crossing_vehicle_remains_shadow_only_without_wide_camera():
   interpreter = SceneInterpreter()
   image = np.zeros((416, 416, 3), dtype=np.uint8)
   geometry = straight_geometry()
@@ -218,7 +247,55 @@ def test_crossing_vehicle_is_shadow_only_during_turn():
 
   assert observations[-1].event == SceneEvent.CROSS_TRAFFIC_RISK
   assert not observations[-1].voice_eligible
-  assert observations[-1].reason == "shadowPathConflict"
+
+
+def test_unchecked_stationary_junction_vehicle_warns_after_four_wide_frames():
+  interpreter = SceneInterpreter()
+  image = np.zeros((416, 416, 3), dtype=np.uint8)
+  geometry = straight_geometry()
+
+  observations = [
+    interpreter.update(
+      [road_user_detection(12.0, 4.0, class_id=COCO_CAR, score=0.8)],
+      image,
+      3.0,
+      index * 0.5,
+      geometry,
+      turning=True,
+      turn_signal=True,
+      camera_source="wide",
+      driver_gaze_side="right",
+    )
+    for index in range(4)
+  ]
+
+  assert observations[-1].event == SceneEvent.CROSS_TRAFFIC_RISK
+  assert observations[-1].voice_eligible
+  assert observations[-1].reason == "uncheckedJunctionVehicle"
+  assert observations[-1].side == "left"
+
+
+def test_recent_side_check_suppresses_stationary_junction_reminder():
+  interpreter = SceneInterpreter()
+  image = np.zeros((416, 416, 3), dtype=np.uint8)
+  geometry = straight_geometry()
+
+  observations = [
+    interpreter.update(
+      [road_user_detection(12.0, 4.0, class_id=COCO_CAR, score=0.8)],
+      image,
+      3.0,
+      index * 0.5,
+      geometry,
+      turning=True,
+      turn_signal=True,
+      camera_source="wide",
+      driver_gaze_side="left",
+    )
+    for index in range(4)
+  ]
+
+  assert all(observation.event == SceneEvent.NONE for observation in observations)
 
 
 def test_vehicle_outside_path_is_ignored_without_crossing_motion():
@@ -259,14 +336,64 @@ def test_traffic_light_is_shadow_only_even_after_confirmation():
 
 def test_perception_prompt_parser():
   assert get_perception_prompt(b'{"event":"pedestrianRisk","voice":true}') == 8
+  alert = get_perception_alert(
+    b'{"event":"crossTrafficRisk","side":"right","voice":true,"eventId":123,"confidence":0.82}',
+  )
+  assert alert.prompt == 17
+  assert alert.event_id == 123
+  assert alert.confidence == pytest.approx(0.82)
   assert get_perception_prompt(b'{"event":"trafficLightRed","voice":true}') == 0
   assert get_perception_prompt(b'{"event":"trafficLightGreen","voice":false}') == 0
   assert get_perception_prompt(b'not-json') == 0
 
 
+def test_serialized_junction_alert_keeps_radio_event_and_direction():
+  observation = SceneObservation(
+    SceneEvent.CROSS_TRAFFIC_RISK,
+    0.84,
+    True,
+    reason="movingPathConflict",
+    side="right",
+  )
+
+  raw = serialize_observation(42, 0.035, observation, [], 987, "wide")
+  alert = get_perception_alert(raw)
+
+  assert alert.prompt == 17
+  assert alert.event_id == 987
+  assert alert.confidence == pytest.approx(0.84)
+
+
+def test_wide_camera_calibration_composes_camera_and_road_rotations():
+  road_rpy = np.radians([0.2, -1.1, 0.7])
+  wide_rpy = np.radians([-0.4, 0.8, -1.5])
+
+  combined = camera_calibration_rpy(road_rpy, wide_rpy, "wide")
+
+  assert combined is not None
+  np.testing.assert_allclose(
+    rot_from_euler(combined),
+    rot_from_euler(wide_rpy) @ rot_from_euler(road_rpy),
+    atol=1e-9,
+  )
+  np.testing.assert_allclose(
+    camera_calibration_rpy(road_rpy, (), "road"),
+    road_rpy,
+  )
+  assert camera_calibration_rpy(road_rpy, (), "wide") is None
+
+
+def test_driver_gaze_requires_confident_side_look():
+  assert classify_driver_gaze(np.radians(-22.0), True, np.radians(5.0)) == "left"
+  assert classify_driver_gaze(np.radians(22.0), True, np.radians(5.0)) == "right"
+  assert classify_driver_gaze(np.radians(10.0), True, np.radians(5.0)) is None
+  assert classify_driver_gaze(np.radians(22.0), False, np.radians(5.0)) is None
+  assert classify_driver_gaze(np.radians(22.0), True, np.radians(20.0)) is None
+
+
 def test_every_spoken_perception_event_has_a_setting():
   spoken_events = {
     event for event in SceneEvent
-    if event.value in PERCEPTION_PROMPT_MAP
+    if event.value in PERCEPTION_PROMPT_MAP or event == SceneEvent.CROSS_TRAFFIC_RISK
   }
   assert set(PERCEPTION_EVENT_PARAM) == spoken_events

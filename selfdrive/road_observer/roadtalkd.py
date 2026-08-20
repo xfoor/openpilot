@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlsplit
 from cereal import messaging
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.road_observer.perception import get_perception_alert
 from openpilot.selfdrive.road_observer.roadalert import AlertBroker, radio_audio_ready
 from openpilot.selfdrive.road_observer.roadcapture import RoadCapture
 
@@ -389,13 +390,21 @@ def _observer_audio_quiet(now: int | None = None) -> bool:
 
 
 def _collect_alerts_and_gps(alerts: AlertBroker) -> None:
-  sm = messaging.SubMaster(["roadObserverState", "gpsLocationExternal"])
+  sm = messaging.SubMaster(["roadObserverState", "customReservedRawData0", "gpsLocationExternal"])
   while True:
     sm.update(500)
     if sm.updated["roadObserverState"]:
       value = sm["roadObserverState"]
       if not _observer_audio_quiet():
         alerts.publish(value.eventId, value.prompt.raw, value.confidence)
+
+    if sm.updated["customReservedRawData0"] and not _observer_audio_quiet():
+      perception_alert = get_perception_alert(sm["customReservedRawData0"])
+      alerts.publish(
+        perception_alert.event_id,
+        perception_alert.prompt,
+        perception_alert.confidence,
+      )
 
     if sm.updated["gpsLocationExternal"]:
       gps = sm["gpsLocationExternal"]
