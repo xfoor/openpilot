@@ -63,9 +63,9 @@ observer_sound_list: dict[int, str] = {
   10: "observer_light_red_it.wav",
   11: "observer_light_yellow_it.wav",
   12: "observer_light_green_it.wav",
-  13: "warning_soft.wav",
-  14: "warning_soft.wav",
-  15: "warning_immediate.wav",
+  13: "observer_curve_acceleration_it.wav",
+  14: "observer_lead_pull_away_it.wav",
+  15: "observer_cross_traffic_it.wav",
 }
 
 if HARDWARE.get_device_type() == "tizi":
