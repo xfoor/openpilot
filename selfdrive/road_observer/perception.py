@@ -12,18 +12,25 @@ from openpilot.common.transformations.camera import get_view_frame_from_calib_fr
 MODEL_SIZE = 320
 COCO_PERSON = 0
 COCO_BICYCLE = 1
+COCO_CAR = 2
+COCO_MOTORCYCLE = 3
+COCO_BUS = 5
+COCO_TRUCK = 7
 COCO_TRAFFIC_LIGHT = 9
-RELEVANT_CLASSES = (COCO_PERSON, COCO_BICYCLE, COCO_TRAFFIC_LIGHT)
+VEHICLE_CLASSES = (COCO_CAR, COCO_MOTORCYCLE, COCO_BUS, COCO_TRUCK)
+RELEVANT_CLASSES = (COCO_PERSON, COCO_BICYCLE, *VEHICLE_CLASSES, COCO_TRAFFIC_LIGHT)
 MIN_GROUND_DISTANCE = 1.5
 MAX_GROUND_DISTANCE = 80.0
 PEDESTRIAN_CORRIDOR_HALF_WIDTH = 1.6
 CYCLIST_CORRIDOR_HALF_WIDTH = 1.8
+VEHICLE_CORRIDOR_HALF_WIDTH = 2.2
 
 
 class SceneEvent(enum.StrEnum):
   NONE = "none"
   PEDESTRIAN_RISK = "pedestrianRisk"
   CYCLIST_RISK = "cyclistRisk"
+  CROSS_TRAFFIC_RISK = "crossTrafficRisk"
   TRAFFIC_LIGHT_RED = "trafficLightRed"
   TRAFFIC_LIGHT_YELLOW = "trafficLightYellow"
   TRAFFIC_LIGHT_GREEN = "trafficLightGreen"
@@ -248,7 +255,7 @@ class DetectionTracker:
     tracked = []
 
     for detection in detections:
-      if detection.class_id not in (COCO_PERSON, COCO_BICYCLE):
+      if detection.class_id not in (COCO_PERSON, COCO_BICYCLE, *VEHICLE_CLASSES):
         continue
       track_id = self._match(detection, available)
       if track_id is None:
@@ -502,6 +509,44 @@ class SceneInterpreter:
     )
 
   @staticmethod
+  def _vehicle_observation(tracked: TrackedDetection, ego_speed: float,
+                           warning_distance: float, turning: bool) -> SceneObservation | None:
+    if (
+      not turning
+      or tracked.detection.class_id not in VEHICLE_CLASSES
+      or tracked.distance is None
+      or tracked.path_offset is None
+      or tracked.lateral_speed is None
+      or tracked.hits < 3
+      or tracked.detection.score < 0.60
+      or not 0.5 < ego_speed < 15.0
+      or abs(tracked.path_offset) <= VEHICLE_CORRIDOR_HALF_WIDTH
+    ):
+      return None
+
+    toward_speed = -tracked.lateral_speed * math.copysign(1.0, tracked.path_offset)
+    if toward_speed < 0.8:
+      return None
+    time_to_path = (abs(tracked.path_offset) - VEHICLE_CORRIDOR_HALF_WIDTH) / toward_speed
+    distance_at_conflict = tracked.distance - ego_speed * time_to_path
+    if (
+      not 0.0 <= time_to_path <= 3.0
+      or not MIN_GROUND_DISTANCE <= distance_at_conflict <= warning_distance
+    ):
+      return None
+
+    return SceneObservation(
+      event=SceneEvent.CROSS_TRAFFIC_RISK,
+      confidence=tracked.detection.score,
+      voice_eligible=False,
+      reason="shadowPathConflict",
+      track_id=tracked.track_id,
+      distance=tracked.distance,
+      path_offset=tracked.path_offset,
+      lateral_speed=tracked.lateral_speed,
+    )
+
+  @staticmethod
   def _traffic_light_observation(detections: list[Detection],
                                  image_bgr: np.ndarray) -> SceneObservation | None:
     for detection in detections:
@@ -526,13 +571,19 @@ class SceneInterpreter:
 
   def _candidate_observation(self, detections: list[Detection], image_bgr: np.ndarray,
                              ego_speed: float, now: float,
-                             geometry: RoadGeometry | None) -> SceneObservation:
+                             geometry: RoadGeometry | None, turning: bool) -> SceneObservation:
     warning_distance = self._warning_distance(ego_speed)
     road_users = []
+    crossing_vehicles = []
     for tracked in self.tracker.update(detections, geometry, now):
-      observation = self._road_user_observation(tracked, ego_speed, warning_distance)
-      if observation is not None:
-        road_users.append(observation)
+      if tracked.detection.class_id in (COCO_PERSON, COCO_BICYCLE):
+        observation = self._road_user_observation(tracked, ego_speed, warning_distance)
+        if observation is not None:
+          road_users.append(observation)
+      else:
+        observation = self._vehicle_observation(tracked, ego_speed, warning_distance, turning)
+        if observation is not None:
+          crossing_vehicles.append(observation)
 
     if road_users:
       return min(
@@ -540,14 +591,17 @@ class SceneInterpreter:
         key=lambda observation: (not observation.voice_eligible, observation.distance or math.inf),
       )
 
+    if crossing_vehicles:
+      return min(crossing_vehicles, key=lambda observation: observation.distance or math.inf)
+
     return self._traffic_light_observation(detections, image_bgr) or SceneObservation(
       SceneEvent.NONE, 0.0, False,
     )
 
   def update(self, detections: list[Detection], image_bgr: np.ndarray,
              ego_speed: float, now: float,
-             geometry: RoadGeometry | None = None) -> SceneObservation:
-    observation = self._candidate_observation(detections, image_bgr, ego_speed, now, geometry)
+             geometry: RoadGeometry | None = None, turning: bool = False) -> SceneObservation:
+    observation = self._candidate_observation(detections, image_bgr, ego_speed, now, geometry, turning)
     if observation.event == SceneEvent.NONE:
       self.candidate = SceneEvent.NONE
       self.candidate_count = 0

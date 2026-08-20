@@ -13,6 +13,7 @@ $Cxx.namespace("cereal");
 struct RoadObserverState @0x81c2f05a394cf4af {
   prompt @0 :Prompt;
   confidence @1 :Float32;
+  eventId @2 :UInt64;
 
   enum Prompt {
     none @0;
@@ -23,6 +24,14 @@ struct RoadObserverState @0x81c2f05a394cf4af {
     drowsiness @5;
     restRecommended @6;
     restRequired @7;
+    pedestrian @8;
+    cyclist @9;
+    trafficLightRed @10;
+    trafficLightYellow @11;
+    trafficLightGreen @12;
+    curveAcceleration @13;
+    leadPullAway @14;
+    crossTraffic @15;
   }
 }
 

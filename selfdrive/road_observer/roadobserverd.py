@@ -5,13 +5,13 @@ import math
 import time
 from dataclasses import dataclass
 
-from cereal import messaging
+from cereal import car, messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 
 
 OBSERVER_RATE = 5
-OBSERVER_SERVICES = ["carState", "radarState", "driverMonitoringState", "driverStateV2"]
+OBSERVER_SERVICES = ["carState", "controlsState", "radarState", "driverMonitoringState", "driverStateV2"]
 
 
 class Prompt(enum.IntEnum):
@@ -23,6 +23,8 @@ class Prompt(enum.IntEnum):
   DROWSINESS = 5
   REST_RECOMMENDED = 6
   REST_REQUIRED = 7
+  CURVE_ACCELERATION = 13
+  LEAD_PULL_AWAY = 14
 
 
 PROMPT_PARAM = {
@@ -33,6 +35,8 @@ PROMPT_PARAM = {
   Prompt.DROWSINESS: "RoadObserverDriverHealthEnabled",
   Prompt.REST_RECOMMENDED: "RoadObserverDriverHealthEnabled",
   Prompt.REST_REQUIRED: "RoadObserverDriverHealthEnabled",
+  Prompt.CURVE_ACCELERATION: "RoadObserverCurveEnabled",
+  Prompt.LEAD_PULL_AWAY: "RoadObserverLeadPullAwayEnabled",
 }
 
 
@@ -48,7 +52,13 @@ class ObserverInput:
   now: float
   ego_speed: float
   ego_acceleration: float
+  gas_pressed: bool
   brake_pressed: bool
+  cruise_enabled: bool
+  cruise_speed: float
+  steering_angle: float
+  curvature: float
+  stock_acc: bool
   lead_status: bool
   lead_distance: float
   lead_relative_speed: float
@@ -71,10 +81,14 @@ class RoadObserver:
   DROWSINESS_COOLDOWN = 120.0
   REST_RECOMMENDED_COOLDOWN = 30.0 * 60.0
   REST_REQUIRED_COOLDOWN = 15.0 * 60.0
+  CURVE_ACCELERATION_COOLDOWN = 20.0
+  LEAD_PULL_AWAY_COOLDOWN = 15.0
   STOPPED_CONFIRMATION = 2.0
   LEAD_BRAKING_CONFIRMATION = 0.5
   SLOWING_CONFIRMATION = 0.6
   DROWSINESS_CONFIRMATION = 2.0
+  CURVE_ACCELERATION_CONFIRMATION = 0.5
+  LEAD_PULL_AWAY_CONFIRMATION = 1.0
   DRIVER_HEALTH_MIN_SPEED = 5.0
   REST_RECOMMENDED_AFTER = 2.0 * 60.0 * 60.0
   REST_REQUIRED_AFTER = 4.5 * 60.0 * 60.0
@@ -89,6 +103,8 @@ class RoadObserver:
     self.lead_braking_since: float | None = None
     self.slowing_since: float | None = None
     self.drowsiness_since: float | None = None
+    self.curve_acceleration_since: float | None = None
+    self.lead_pull_away_since: float | None = None
     self.drive_time = drive_time_state or DriveTimeState()
     self.last_update_at: float | None = None
 
@@ -176,6 +192,37 @@ class RoadObserver:
       self.SLOWING_CONFIRMATION,
     )
 
+    curve_acceleration = self._confirmed(
+      state.stock_acc
+      and state.cruise_enabled
+      and 2.0 < state.ego_speed < 15.0
+      and abs(state.steering_angle) >= 55.0
+      and abs(state.curvature) >= 0.01
+      and state.ego_acceleration >= 0.35
+      and not state.gas_pressed
+      and not state.brake_pressed,
+      "curve_acceleration_since",
+      state.now,
+      self.CURVE_ACCELERATION_CONFIRMATION,
+    )
+
+    lead_pull_away = self._confirmed(
+      state.stock_acc
+      and state.cruise_enabled
+      and state.lead_status
+      and state.lead_probability >= 0.5
+      and state.ego_speed >= 0.5
+      and 3.0 <= state.lead_distance <= 80.0
+      and state.lead_relative_speed >= 0.5
+      and state.cruise_speed >= state.ego_speed + 1.0
+      and state.ego_acceleration < 0.45
+      and not state.gas_pressed
+      and not state.brake_pressed,
+      "lead_pull_away_since",
+      state.now,
+      self.LEAD_PULL_AWAY_CONFIRMATION,
+    )
+
     lead_departed = False
     lead_stopped = (
       state.lead_status
@@ -218,8 +265,14 @@ class RoadObserver:
     if slowing_traffic and self._ready(Prompt.SLOWING_TRAFFIC, state.now, self.SLOWING_TRAFFIC_COOLDOWN):
       self.slowing_since = None
       return Prompt.SLOWING_TRAFFIC, 0.8
+    if curve_acceleration and self._ready(Prompt.CURVE_ACCELERATION, state.now, self.CURVE_ACCELERATION_COOLDOWN):
+      self.curve_acceleration_since = None
+      return Prompt.CURVE_ACCELERATION, 0.9
     if lead_departed and self._ready(Prompt.LEAD_DEPARTED, state.now, self.LEAD_DEPARTED_COOLDOWN):
       return Prompt.LEAD_DEPARTED, 0.9
+    if lead_pull_away and self._ready(Prompt.LEAD_PULL_AWAY, state.now, self.LEAD_PULL_AWAY_COOLDOWN):
+      self.lead_pull_away_since = None
+      return Prompt.LEAD_PULL_AWAY, 0.8
     if rest_required and self._ready(Prompt.REST_REQUIRED, state.now, self.REST_REQUIRED_COOLDOWN):
       return Prompt.REST_REQUIRED, 1.0
     if rest_recommended and self._ready(Prompt.REST_RECOMMENDED, state.now, self.REST_RECOMMENDED_COOLDOWN):
@@ -264,6 +317,8 @@ def _build_submaster() -> messaging.SubMaster:
 
 def main() -> None:
   params = Params()
+  CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
+  stock_acc = CP.pcmCruise and not CP.openpilotLongitudinalControl
   drive_time_state = restore_drive_time_state(
     params.get("RoadObserverDriveState"),
     time.time(),  # noqa: TID251  # Wall time carries stopped duration across reboots.
@@ -288,7 +343,13 @@ def main() -> None:
         now=now,
         ego_speed=sm["carState"].vEgo,
         ego_acceleration=sm["carState"].aEgo,
+        gas_pressed=sm["carState"].gasPressed,
         brake_pressed=sm["carState"].brakePressed,
+        cruise_enabled=sm["carState"].cruiseState.enabled,
+        cruise_speed=sm["carState"].cruiseState.speed,
+        steering_angle=sm["carState"].steeringAngleDeg,
+        curvature=sm["controlsState"].curvature,
+        stock_acc=stock_acc,
         lead_status=lead.status,
         lead_distance=lead.dRel,
         lead_relative_speed=lead.vRel,
@@ -320,6 +381,7 @@ def main() -> None:
     msg.valid = sm.all_checks()
     msg.roadObserverState.prompt = int(prompt)
     msg.roadObserverState.confidence = confidence
+    msg.roadObserverState.eventId = time.monotonic_ns() if prompt != Prompt.NONE else 0
     pm.send("roadObserverState", msg)
     rk.keep_time()
 

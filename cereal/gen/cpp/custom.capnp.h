@@ -29,6 +29,14 @@ enum class Prompt_964679497a159052: uint16_t {
   DROWSINESS,
   REST_RECOMMENDED,
   REST_REQUIRED,
+  PEDESTRIAN,
+  CYCLIST,
+  TRAFFIC_LIGHT_RED,
+  TRAFFIC_LIGHT_YELLOW,
+  TRAFFIC_LIGHT_GREEN,
+  CURVE_ACCELERATION,
+  LEAD_PULL_AWAY,
+  CROSS_TRAFFIC,
 };
 CAPNP_DECLARE_ENUM(Prompt, 964679497a159052);
 CAPNP_DECLARE_SCHEMA(aedffd8f31e7b55d);
@@ -66,7 +74,7 @@ struct RoadObserverState {
 
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(81c2f05a394cf4af, 1, 0)
+    CAPNP_DECLARE_STRUCT_HEADER(81c2f05a394cf4af, 2, 0)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -381,6 +389,8 @@ public:
 
   inline float getConfidence() const;
 
+  inline  ::uint64_t getEventId() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -414,6 +424,9 @@ public:
 
   inline float getConfidence();
   inline void setConfidence(float value);
+
+  inline  ::uint64_t getEventId();
+  inline void setEventId( ::uint64_t value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1817,6 +1830,20 @@ inline float RoadObserverState::Builder::getConfidence() {
 }
 inline void RoadObserverState::Builder::setConfidence(float value) {
   _builder.setDataField<float>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint64_t RoadObserverState::Reader::getEventId() const {
+  return _reader.getDataField< ::uint64_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t RoadObserverState::Builder::getEventId() {
+  return _builder.getDataField< ::uint64_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+inline void RoadObserverState::Builder::setEventId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 

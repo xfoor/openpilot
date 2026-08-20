@@ -3,6 +3,7 @@ import pytest
 
 from openpilot.selfdrive.road_observer.perception import (
   COCO_PERSON,
+  COCO_CAR,
   COCO_TRAFFIC_LIGHT,
   Detection,
   MODEL_SIZE,
@@ -193,6 +194,48 @@ def test_static_pedestrian_outside_path_does_not_alert():
       geometry,
     )
     for index, distance in enumerate((30.0, 25.0, 20.0))
+  ]
+
+  assert all(observation.event == SceneEvent.NONE for observation in observations)
+
+
+def test_crossing_vehicle_is_shadow_only_during_turn():
+  interpreter = SceneInterpreter()
+  image = np.zeros((416, 416, 3), dtype=np.uint8)
+  geometry = straight_geometry()
+
+  observations = [
+    interpreter.update(
+      [road_user_detection(14.0, lateral, class_id=COCO_CAR)],
+      image,
+      5.0,
+      index * 0.5,
+      geometry,
+      turning=True,
+    )
+    for index, lateral in enumerate((3.6, 3.1, 2.6))
+  ]
+
+  assert observations[-1].event == SceneEvent.CROSS_TRAFFIC_RISK
+  assert not observations[-1].voice_eligible
+  assert observations[-1].reason == "shadowPathConflict"
+
+
+def test_vehicle_outside_path_is_ignored_without_crossing_motion():
+  interpreter = SceneInterpreter()
+  image = np.zeros((416, 416, 3), dtype=np.uint8)
+  geometry = straight_geometry()
+
+  observations = [
+    interpreter.update(
+      [road_user_detection(distance, 3.5, class_id=COCO_CAR)],
+      image,
+      5.0,
+      index * 0.5,
+      geometry,
+      turning=True,
+    )
+    for index, distance in enumerate((30.0, 27.0, 24.0))
   ]
 
   assert all(observation.event == SceneEvent.NONE for observation in observations)

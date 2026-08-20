@@ -15,9 +15,12 @@ import struct
 import threading
 import time
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
+from cereal import messaging
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.road_observer.roadalert import AlertBroker, radio_audio_ready
 from openpilot.selfdrive.road_observer.roadcapture import RoadCapture
 
 PORT = 7766
@@ -51,8 +54,9 @@ def _canonical_request(method: str, path: str, timestamp: str, nonce: str, body:
 
 
 class RoadTalkCore:
-  def __init__(self, params: Params | None = None):
+  def __init__(self, params: Params | None = None, alerts: AlertBroker | None = None):
     self.params = params or Params()
+    self.alerts = alerts or AlertBroker()
     self.capture = RoadCapture()
     self.nonces: deque[str] = deque(maxlen=NONCE_CACHE_SIZE)
     self.nonce_lock = threading.Lock()
@@ -81,7 +85,7 @@ class RoadTalkCore:
         return 409, {"error": "Comma 4 is already paired"}
       secret = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
       self._write_private(SECRET_PATH, secret)
-      return 200, {"secret": secret, "protocol": 1}
+      return 200, {"secret": secret, "protocol": 2}
 
   def authenticate(self, method: str, path: str, headers: Any, body: bytes) -> bool:
     secret = self._read(SECRET_PATH)
@@ -90,7 +94,7 @@ class RoadTalkCore:
     signature = headers.get("X-RoadTalk-Signature", "")
     if not secret or not timestamp.isdigit() or len(nonce) < 16:
       return False
-    if abs(time.time() - int(timestamp)) > MAX_CLOCK_SKEW_SECONDS:
+    if abs(time.time() - int(timestamp)) > MAX_CLOCK_SKEW_SECONDS:  # noqa: TID251
       return False
 
     expected = hmac.new(
@@ -110,20 +114,29 @@ class RoadTalkCore:
     quiet_until_raw = self._read(QUIET_UNTIL_PATH) or "0"
     quiet_until = int(quiet_until_raw) if quiet_until_raw.isdigit() else 0
     status = {
-      "protocol": 1,
+      "protocol": 2,
       "onroad": self.params.get_bool("IsOnroad"),
       "engaged": self.params.get_bool("IsEngaged"),
       "observerEnabled": self.params.get_bool("RoadObserverEnabled"),
       "perceptionEnabled": self.params.get_bool("RoadPerceptionEnabled"),
+      "radioAudioReady": radio_audio_ready(ready_path=self.alerts.ready_path),
       "quietUntil": quiet_until,
       "version": self.params.get("Version") or "unknown",
     }
     status.update(self.capture.status())
     return status
 
+  def telemetry(self) -> dict[str, Any]:
+    gps = self.alerts.telemetry()
+    return {
+      "protocol": 2,
+      "onroad": self.params.get_bool("IsOnroad"),
+      "gps": gps,
+    }
+
   def command(self, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
-    now = int(time.time())
+    now = int(time.time())  # noqa: TID251
     if action == "observer_mute":
       self._write_private(QUIET_UNTIL_PATH, str(MUTE_UNTIL))
       return 200, {"ok": True, "message": "Comma observer muted"}
@@ -151,7 +164,7 @@ class RoadTalkCore:
 
 
 class RoadTalkHandler(BaseHTTPRequestHandler):
-  server_version = "RoadTalk/1"
+  server_version = "RoadTalk/2"
 
   @property
   def core(self) -> RoadTalkCore:
@@ -206,26 +219,57 @@ class RoadTalkHandler(BaseHTTPRequestHandler):
   def _private_peer(self) -> bool:
     return _is_private_peer(self.client_address[0])
 
+  def _next_alert(self) -> None:
+    query = parse_qs(urlsplit(self.path).query)
+    try:
+      after = int(query.get("after", ["0"])[0])
+      wait_ms = int(query.get("waitMs", ["0"])[0])
+    except ValueError:
+      self._reply(400, {"error": "Invalid alert cursor"})
+      return
+    if after < 0 or wait_ms not in range(2001):
+      self._reply(400, {"error": "Invalid alert cursor"})
+      return
+
+    if self.headers.get("X-RoadTalk-Audio-Ready") == "1":
+      self.core.alerts.mark_radio_ready(True)
+    event = self.core.alerts.next_event(after, wait_ms / 1000.0)
+    self._reply(200, {
+      "protocol": 2,
+      "event": event.payload(time.monotonic()) if event is not None else None,
+    })
+
   def do_GET(self) -> None:
+    path = urlsplit(self.path).path
     if not self._private_peer():
       self._reply(403, {"error": "Private network required"})
     elif (
-      self.path not in ("/v1/status", "/v1/capture/photo", "/v1/capture/media")
-      and not self.path.startswith("/v1/capture/media/")
+      path not in (
+        "/v1/status",
+        "/v1/telemetry",
+        "/v1/alerts/next",
+        "/v1/capture/photo",
+        "/v1/capture/media",
+      )
+      and not path.startswith("/v1/capture/media/")
     ):
       self._reply(404, {"error": "Not found"})
     elif not self.core.authenticate("GET", self.path, self.headers, b""):
       self._reply(401, {"error": "Authentication failed"})
-    elif self.path == "/v1/capture/photo":
+    elif path == "/v1/alerts/next":
+      self._next_alert()
+    elif path == "/v1/telemetry":
+      self._reply(200, self.core.telemetry())
+    elif path == "/v1/capture/photo":
       photo = self.core.capture.photo_bytes()
       if photo is None:
         self._reply(404, {"error": "No road photo is available"})
       else:
         self._reply_jpeg(photo)
-    elif self.path == "/v1/capture/media":
+    elif path == "/v1/capture/media":
       self._reply(200, {"captures": self.core.capture.media()})
-    elif self.path.startswith("/v1/capture/media/"):
-      name = self.path.removeprefix("/v1/capture/media/")
+    elif path.startswith("/v1/capture/media/"):
+      name = path.removeprefix("/v1/capture/media/")
       path = self.core.capture.capture_path(name)
       if path is None:
         self._reply(404, {"error": "Capture not found"})
@@ -250,14 +294,15 @@ class RoadTalkHandler(BaseHTTPRequestHandler):
 
   def do_POST(self) -> None:
     body = self._body()
+    path = urlsplit(self.path).path
     if not self._private_peer():
       self._reply(403, {"error": "Private network required"})
     elif body is None:
       self._reply(413, {"error": "Invalid request size"})
-    elif self.path == "/v1/pair":
+    elif path == "/v1/pair":
       status, value = self.core.pair()
       self._reply(status, value)
-    elif self.path != "/v1/command":
+    elif path not in ("/v1/command", "/v1/alerts/ack", "/v1/alerts/heartbeat"):
       self._reply(404, {"error": "Not found"})
     elif not self.core.authenticate("POST", self.path, self.headers, body):
       self._reply(401, {"error": "Authentication failed"})
@@ -270,11 +315,27 @@ class RoadTalkHandler(BaseHTTPRequestHandler):
       if not isinstance(payload, dict):
         self._reply(400, {"error": "Invalid command"})
         return
-      status, value = self.core.command(payload)
-      self._reply(status, value)
+      if path == "/v1/alerts/ack":
+        event_id = payload.get("eventId")
+        if not isinstance(event_id, int) or event_id <= 0:
+          self._reply(400, {"error": "Invalid alert event"})
+        elif not self.core.alerts.acknowledge(event_id):
+          self._reply(409, {"error": "Alert expired"})
+        else:
+          self._reply(200, {"ok": True, "eventId": event_id})
+      elif path == "/v1/alerts/heartbeat":
+        ready = payload.get("audioReady")
+        if not isinstance(ready, bool):
+          self._reply(400, {"error": "Invalid audio state"})
+        else:
+          self.core.alerts.mark_radio_ready(ready)
+          self._reply(200, {"ok": True, "audioReady": ready})
+      else:
+        status, value = self.core.command(payload)
+        self._reply(status, value)
 
-  def log_message(self, format: str, *args: Any) -> None:
-    cloudlog.debug("roadtalkd " + format, *args)
+  def log_message(self, format_string: str, *args: Any) -> None:
+    cloudlog.debug("roadtalkd " + format_string, *args)
 
 
 class RoadTalkServer(ThreadingHTTPServer):
@@ -299,7 +360,7 @@ def _interface_ipv4(name: str) -> str | None:
 
 def _private_wifi_address() -> str | None:
   for _, name in socket.if_nameindex():
-    if not (name.startswith("wlan") or name.startswith("wifi")):
+    if not name.startswith(("wlan", "wifi")):
       continue
     address = _interface_ipv4(name)
     if address and _is_private_peer(address):
@@ -321,8 +382,51 @@ def _serve_discovery(address: str, stop_event: threading.Event) -> None:
         sock.sendto(DISCOVERY_RESPONSE, peer)
 
 
+def _observer_audio_quiet(now: int | None = None) -> bool:
+  value = RoadTalkCore._read(QUIET_UNTIL_PATH)
+  quiet_until = int(value) if value.isdigit() else 0
+  return (int(time.time()) if now is None else now) < quiet_until  # noqa: TID251
+
+
+def _collect_alerts_and_gps(alerts: AlertBroker) -> None:
+  sm = messaging.SubMaster(["roadObserverState", "gpsLocationExternal"])
+  while True:
+    sm.update(500)
+    if sm.updated["roadObserverState"]:
+      value = sm["roadObserverState"]
+      if not _observer_audio_quiet():
+        alerts.publish(value.eventId, value.prompt.raw, value.confidence)
+
+    if sm.updated["gpsLocationExternal"]:
+      gps = sm["gpsLocationExternal"]
+      valid = (
+        gps.unixTimestampMillis > 1_500_000_000_000
+        and -90.0 <= gps.latitude <= 90.0
+        and -180.0 <= gps.longitude <= 180.0
+        and gps.horizontalAccuracy <= 100.0
+        and (gps.latitude != 0.0 or gps.longitude != 0.0)
+      )
+      alerts.update_gps({
+        "valid": valid,
+        "timestampMillis": gps.unixTimestampMillis,
+        "latitude": gps.latitude,
+        "longitude": gps.longitude,
+        "altitude": gps.altitude,
+        "speed": gps.speed,
+        "bearing": gps.bearingDeg,
+        "accuracy": gps.horizontalAccuracy,
+      })
+
+
 def main() -> None:
-  core = RoadTalkCore()
+  alerts = AlertBroker()
+  core = RoadTalkCore(alerts=alerts)
+  threading.Thread(
+    target=_collect_alerts_and_gps,
+    args=(alerts,),
+    name="roadtalk-events",
+    daemon=True,
+  ).start()
   while True:
     address = _private_wifi_address()
     if address is None:

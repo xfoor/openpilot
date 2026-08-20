@@ -19,7 +19,13 @@ def state(now: float, **kwargs) -> ObserverInput:
   values = {
     "ego_speed": 0.0,
     "ego_acceleration": 0.0,
+    "gas_pressed": False,
     "brake_pressed": False,
+    "cruise_enabled": False,
+    "cruise_speed": 0.0,
+    "steering_angle": 0.0,
+    "curvature": 0.0,
+    "stock_acc": True,
     "lead_status": False,
     "lead_distance": 0.0,
     "lead_relative_speed": 0.0,
@@ -70,6 +76,62 @@ def test_lead_departed_after_confirmed_stop():
   assert observer.update(state(0.0, lead_status=True, lead_distance=8.0))[0] == Prompt.NONE
   assert observer.update(state(2.1, lead_status=True, lead_distance=8.0))[0] == Prompt.NONE
   assert observer.update(state(2.3, lead_status=True, lead_distance=9.0, lead_speed=1.2))[0] == Prompt.LEAD_DEPARTED
+
+
+def test_curve_acceleration_requires_stock_acc_and_no_pedals():
+  observer = RoadObserver()
+  accelerating_curve = {
+    "ego_speed": 8.0,
+    "ego_acceleration": 0.8,
+    "cruise_enabled": True,
+    "cruise_speed": 12.0,
+    "steering_angle": 80.0,
+    "curvature": 0.025,
+  }
+
+  assert observer.update(state(0.0, **accelerating_curve))[0] == Prompt.NONE
+  assert observer.update(state(0.6, **accelerating_curve))[0] == Prompt.CURVE_ACCELERATION
+
+  for suppression in ({"stock_acc": False}, {"gas_pressed": True}, {"brake_pressed": True}):
+    suppressed = RoadObserver()
+    suppressed.update(state(0.0, **accelerating_curve, **suppression))
+    assert suppressed.update(state(1.0, **accelerating_curve, **suppression))[0] == Prompt.NONE
+
+
+def test_lead_pull_away_detects_stock_acc_lag():
+  observer = RoadObserver()
+  lagging = {
+    "ego_speed": 7.0,
+    "ego_acceleration": 0.2,
+    "cruise_enabled": True,
+    "cruise_speed": 12.0,
+    "lead_status": True,
+    "lead_distance": 20.0,
+    "lead_relative_speed": 1.5,
+    "lead_speed": 8.5,
+    "lead_probability": 0.9,
+  }
+
+  assert observer.update(state(0.0, **lagging))[0] == Prompt.NONE
+  assert observer.update(state(1.1, **lagging))[0] == Prompt.LEAD_PULL_AWAY
+
+
+def test_lead_pull_away_stops_when_driver_accelerates():
+  observer = RoadObserver()
+  lagging = {
+    "ego_speed": 7.0,
+    "ego_acceleration": 0.2,
+    "cruise_enabled": True,
+    "cruise_speed": 12.0,
+    "lead_status": True,
+    "lead_distance": 20.0,
+    "lead_relative_speed": 1.5,
+    "lead_speed": 8.5,
+    "lead_probability": 0.9,
+  }
+
+  observer.update(state(0.0, **lagging))
+  assert observer.update(state(1.1, **lagging, gas_pressed=True))[0] == Prompt.NONE
 
 
 def test_brief_lead_stop_does_not_alert():

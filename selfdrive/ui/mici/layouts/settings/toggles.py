@@ -21,7 +21,9 @@ class TogglesLayoutMici(NavScroller):
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
     road_observer_toggle = BigParamControl(tr("Italian road observer"), "RoadObserverEnabled")
     road_observer_attention_toggle = BigParamControl(tr("Driver attention voice alerts"), "RoadObserverAttentionEnabled")
+    road_observer_curve_toggle = BigParamControl(tr("Curve acceleration voice alerts"), "RoadObserverCurveEnabled")
     road_observer_lead_toggle = BigParamControl(tr("Lead vehicle voice alerts"), "RoadObserverLeadEnabled")
+    road_observer_lead_pull_away_toggle = BigParamControl(tr("Lead pull-away voice alerts"), "RoadObserverLeadPullAwayEnabled")
     road_observer_lead_braking_toggle = BigParamControl(tr("Lead braking voice alerts"), "RoadObserverLeadBrakingEnabled")
     road_observer_slowing_toggle = BigParamControl(tr("Slowing traffic voice alerts"), "RoadObserverSlowingTrafficEnabled")
     road_observer_driver_health_toggle = BigParamControl(tr("Driver health and rest alerts"), "RoadObserverDriverHealthEnabled")
@@ -41,7 +43,9 @@ class TogglesLayoutMici(NavScroller):
       always_on_dm_toggle,
       road_observer_toggle,
       road_observer_attention_toggle,
+      road_observer_curve_toggle,
       road_observer_lead_toggle,
+      road_observer_lead_pull_away_toggle,
       road_observer_lead_braking_toggle,
       road_observer_slowing_toggle,
       road_observer_driver_health_toggle,
@@ -62,7 +66,9 @@ class TogglesLayoutMici(NavScroller):
       ("AlwaysOnDM", always_on_dm_toggle),
       ("RoadObserverEnabled", road_observer_toggle),
       ("RoadObserverAttentionEnabled", road_observer_attention_toggle),
+      ("RoadObserverCurveEnabled", road_observer_curve_toggle),
       ("RoadObserverLeadEnabled", road_observer_lead_toggle),
+      ("RoadObserverLeadPullAwayEnabled", road_observer_lead_pull_away_toggle),
       ("RoadObserverLeadBrakingEnabled", road_observer_lead_braking_toggle),
       ("RoadObserverSlowingTrafficEnabled", road_observer_slowing_toggle),
       ("RoadObserverDriverHealthEnabled", road_observer_driver_health_toggle),

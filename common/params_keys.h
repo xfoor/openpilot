@@ -109,11 +109,13 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"RecordFront", {PERSISTENT, BOOL}},
     {"RecordFrontLock", {PERSISTENT, BOOL}},  // for the internal fleet
     {"RoadObserverAttentionEnabled", {PERSISTENT, BOOL, "1"}},
+    {"RoadObserverCurveEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadObserverDriveState", {PERSISTENT | DONT_LOG, JSON}},
     {"RoadObserverDriverHealthEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadObserverEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadObserverLeadBrakingEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadObserverLeadEnabled", {PERSISTENT, BOOL, "1"}},
+    {"RoadObserverLeadPullAwayEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadObserverSlowingTrafficEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadPerceptionCyclistEnabled", {PERSISTENT, BOOL, "1"}},
     {"RoadPerceptionEnabled", {PERSISTENT, BOOL, "0"}},

@@ -11,6 +11,7 @@ from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.road_observer.perception import get_perception_prompt
+from openpilot.selfdrive.road_observer.roadalert import radio_acknowledged, radio_audio_ready
 
 from openpilot.system import micd
 from openpilot.system.hardware import HARDWARE
@@ -22,6 +23,7 @@ MIN_VOLUME = 0.1
 ALERT_RAMP_TIME = 4 # seconds to ramp to max volume for warningImmediate
 SELFDRIVE_STATE_TIMEOUT = 5 # 5 seconds
 FILTER_DT = 1. / (micd.SAMPLE_RATE / micd.FFT_SAMPLES)
+RADIO_FALLBACK_DELAY_SECONDS = 0.3
 
 AMBIENT_DB = 24 # DB where MIN_VOLUME is applied
 DB_SCALE = 30 # AMBIENT_DB + DB_SCALE is where MAX_VOLUME is applied
@@ -61,6 +63,9 @@ observer_sound_list: dict[int, str] = {
   10: "observer_light_red_it.wav",
   11: "observer_light_yellow_it.wav",
   12: "observer_light_green_it.wav",
+  13: "warning_soft.wav",
+  14: "warning_soft.wav",
+  15: "warning_immediate.wav",
 }
 
 if HARDWARE.get_device_type() == "tizi":
@@ -88,6 +93,10 @@ class Soundd:
     self.current_sound_frame = 0
     self.current_observer_prompt = 0
     self.current_observer_sound_frame = 0
+    self.current_observer_event_id = 0
+    self.pending_observer_prompt = 0
+    self.pending_observer_event_id = 0
+    self.pending_observer_deadline = 0.0
 
     self.ramp_start_volume = MIN_VOLUME
     self.ramp_start_time = 0.
@@ -150,6 +159,7 @@ class Soundd:
       if self.current_observer_sound_frame >= sound_data.shape[0]:
         self.current_observer_prompt = 0
         self.current_observer_sound_frame = 0
+        self.current_observer_event_id = 0
 
     return ret * self.current_volume
 
@@ -167,10 +177,20 @@ class Soundd:
       if new_alert != AudibleAlert.none:
         self.current_observer_prompt = 0
         self.current_observer_sound_frame = 0
+        self.current_observer_event_id = 0
+        self.pending_observer_prompt = 0
+        self.pending_observer_event_id = 0
       self.current_alert = new_alert
       self.current_sound_frame = 0
 
-  def update_observer_prompt(self, prompt):
+  def _play_observer_prompt(self, prompt: int, event_id: int = 0) -> None:
+    self.current_observer_prompt = prompt
+    self.current_observer_sound_frame = 0
+    self.current_observer_event_id = event_id
+    self.pending_observer_prompt = 0
+    self.pending_observer_event_id = 0
+
+  def update_observer_prompt(self, prompt, event_id: int = 0):
     now = time.monotonic()
     if now - self.observer_quiet_checked_at >= 1.0:
       try:
@@ -182,8 +202,31 @@ class Soundd:
       self.observer_quiet_checked_at = now
 
     if prompt and time.time() >= self.observer_quiet_until and self.current_alert == AudibleAlert.none:  # noqa: TID251
-      self.current_observer_prompt = prompt
+      if event_id and radio_audio_ready():
+        self.pending_observer_prompt = prompt
+        self.pending_observer_event_id = event_id
+        self.pending_observer_deadline = now + RADIO_FALLBACK_DELAY_SECONDS
+      else:
+        self._play_observer_prompt(prompt, event_id)
+
+  def process_pending_observer(self, now: float | None = None) -> None:
+    current = time.monotonic() if now is None else now
+    if self.pending_observer_event_id:
+      if radio_acknowledged(self.pending_observer_event_id):
+        self.pending_observer_prompt = 0
+        self.pending_observer_event_id = 0
+      elif current >= self.pending_observer_deadline:
+        self._play_observer_prompt(
+          self.pending_observer_prompt,
+          self.pending_observer_event_id,
+        )
+    elif (
+      self.current_observer_event_id
+      and radio_acknowledged(self.current_observer_event_id)
+    ):
+      self.current_observer_prompt = 0
       self.current_observer_sound_frame = 0
+      self.current_observer_event_id = 0
 
   def get_audible_alert(self, sm):
     if sm.updated['selfdriveState']:
@@ -197,9 +240,11 @@ class Soundd:
       self.selfdrive_timeout_alert = False
 
     if sm.updated['roadObserverState']:
-      self.update_observer_prompt(sm['roadObserverState'].prompt.raw)
+      observer = sm['roadObserverState']
+      self.update_observer_prompt(observer.prompt.raw, observer.eventId)
     if sm.updated['customReservedRawData0']:
       self.update_observer_prompt(get_perception_prompt(sm['customReservedRawData0']))
+    self.process_pending_observer()
 
   def calculate_volume(self, weighted_db):
     volume = ((weighted_db - AMBIENT_DB) / DB_SCALE) * (MAX_VOLUME - MIN_VOLUME) + MIN_VOLUME

@@ -840,8 +840,16 @@ msgid "Driver attention voice alerts"
 msgstr "Avvisi vocali attenzione conducente"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Curve acceleration voice alerts"
+msgstr "Avvisi vocali accelerazione in curva"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Lead vehicle voice alerts"
 msgstr "Avvisi vocali veicolo davanti"
+
+#: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
+msgid "Lead pull-away voice alerts"
+msgstr "Avvisi vocali veicolo che si allontana"
 
 #: openpilot/selfdrive/ui/mici/layouts/settings/toggles.py
 msgid "Lead braking voice alerts"

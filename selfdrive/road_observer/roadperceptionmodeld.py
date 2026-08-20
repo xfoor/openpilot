@@ -58,7 +58,7 @@ class YoloXDetector:
 def serialize_observation(frame_id: int, execution_time: float, observation,
                           detections, voice_enabled: bool) -> bytes:
   payload = {
-    "version": 2,
+    "version": 3,
     "frameId": frame_id,
     "executionTime": round(execution_time, 4),
     "event": observation.event.value,
@@ -152,7 +152,20 @@ def main() -> None:
       detections = decode_yolox(detector.infer(model_input))
       detections = remap_detections(detections, image_bgr.shape[1], image_bgr.shape[0])
       geometry = build_road_geometry(sm)
-      observation = interpreter.update(detections, image_bgr, sm["carState"].vEgo, now, geometry)
+      car_state = sm["carState"]
+      turning = (
+        car_state.leftBlinker
+        or car_state.rightBlinker
+        or abs(car_state.steeringAngleDeg) >= 25.0
+      )
+      observation = interpreter.update(
+        detections,
+        image_bgr,
+        car_state.vEgo,
+        now,
+        geometry,
+        turning=turning,
+      )
       execution_time = time.perf_counter() - started
       event_param = PERCEPTION_EVENT_PARAM.get(observation.event)
       voice_enabled = (

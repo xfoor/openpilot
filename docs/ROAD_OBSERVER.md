@@ -25,6 +25,10 @@ connection.
   the calibrated future path or moving toward it.
 - `Attenzione, ciclista sulla traiettoria.` for a tracked cyclist occupying the
   calibrated future path or moving toward it.
+- `Attenzione, l'auto sta accelerando in curva.` when factory ACC accelerates
+  for at least half a second in a tight, low-speed curve without a pedal input.
+- `Il veicolo davanti si sta allontanando.` when a confidently tracked lead
+  pulls away for at least one second but factory ACC is not matching it.
 
 Stock openpilot alerts always have audio priority. The observer is enabled by
 default on this branch and can be disabled in Settings under
@@ -34,14 +38,22 @@ default on this branch and can be disabled in Settings under
 
 `roadperceptionmodeld` samples the road camera at 2 Hz and runs a compiled
 YOLOX-Nano 320x320 COCO model locally on the comma 4 Qualcomm backend. It keeps
-only person, bicycle, and traffic-light detections and applies class-aware NMS.
-Pedestrian and cyclist boxes are tracked across frames. Their ground contact
-points are projected through the comma's live camera calibration and compared
-with the future path already produced by openpilot's driving model. A warning
-requires either repeated occupancy of that path or tracked lateral motion that
-would enter it within 2.5 seconds and inside the speed-dependent warning
-distance. If calibration, camera identity, or the future path is unavailable,
-no pedestrian or cyclist voice prompt is eligible.
+person, bicycle, vehicle, and traffic-light detections and applies class-aware
+NMS. Pedestrian, cyclist, car, motorcycle, bus, and truck boxes are tracked
+across frames. Their ground contact points are projected through the comma's
+live camera calibration and compared with the future path already produced by
+openpilot's driving model. A pedestrian or cyclist warning requires either
+repeated occupancy of that path or tracked lateral motion that would enter it
+within 2.5 seconds and inside the speed-dependent warning distance. If
+calibration, camera identity, or the future path is unavailable, no pedestrian
+or cyclist voice prompt is eligible.
+
+Vehicles moving toward the driven path during a signalled or strongly steered
+turn are recorded as cross-traffic shadow observations. They never produce
+speech in this release. The road camera does not reliably cover every approach
+at a junction, so cross-traffic speech remains blocked until wide-camera
+geometry and positive/negative junction replay establish useful recall without
+excess false alerts.
 
 Traffic-light color is estimated only inside a confirmed traffic-light crop.
 It does not infer which traffic light legally controls the current lane.
@@ -67,11 +79,16 @@ until a signal-specific model and lane-association strategy pass broader
 positive and negative replay.
 
 Settings also provide individual switches for driver-attention, lead-vehicle,
-lead-braking, slowing-traffic, driver-health, pedestrian, and cyclist
-announcements. Turning off the perception voice master prevents pedestrian and
-cyclist announcements without disabling stock openpilot safety sounds. Turning
-off Italian road observer separately prevents driver, lead, and traffic
-announcements from this observer.
+lead-braking, slowing-traffic, driver-health, curve-acceleration,
+lead-pull-away, pedestrian, and cyclist announcements. Turning off the
+perception voice master prevents pedestrian and cyclist announcements without
+disabling stock openpilot safety sounds. Turning off Italian road observer
+separately prevents driver, lead, and traffic announcements from this observer.
+
+The curve and lead-pull-away rules only run when the vehicle uses factory ACC;
+they do not request acceleration or braking. An 18 August 2026 replay covering
+about 80 minutes produced three curve advisories, including both reviewed
+roundabout accelerations, and two lead-pull-away advisories.
 
 The driving clocks count time above 1 m/s and persist across ignition cycles.
 A stationary period of 15 minutes resets the two-hour health reminder. A
@@ -102,10 +119,19 @@ Before publishing an installer commit:
 ## RoadTalk companion
 
 The optional `roadtalkd` service lets the RoadTalk Android head-unit app query
-basic status, control only the custom observer audio, capture a forward-road
-photo, or record a one- or two-minute road video. It binds to the comma four's
-private Wi-Fi interface and never exposes CAN, shell, process control,
-arbitrary parameter writes, steering, braking, acceleration, or engagement.
+basic status and GPS, receive observer speech events, control only the custom
+observer audio, capture a forward-road photo, or record a one- or two-minute
+road video. It binds to the comma four's private Wi-Fi interface and never
+exposes CAN, shell, process control, arbitrary parameter writes, steering,
+braking, acceleration, or engagement.
+
+RoadTalk protocol 2 makes the radio's offline Italian TTS the primary speech
+channel. Every event is authenticated and expires after five seconds. When the
+radio reports that audio is ready, `soundd` waits up to 300 ms for the radio's
+playback acknowledgement. A missing acknowledgement immediately falls back to
+the local Comma sound; stock openpilot safety alerts always remain local and
+always take priority. The companion also records journeys locally from Comma
+GPS, falls back to recent radio GPS, and can export a GeoJSON trace.
 
 Pair while parked:
 
