@@ -236,7 +236,7 @@ void loggerd_thread() {
   for (const auto& [_, it] : services) {
     const bool encoder = util::ends_with(it.name, "EncodeData");
     const bool livestream_encoder = util::starts_with(it.name, "livestream");
-    const bool parking_encoder = (it.name == "roadEncodeData") || (it.name == "qRoadEncodeData");
+    const bool parking_encoder = (it.name == "roadEncodeData") || (it.name == "qRoadEncodeData") || (it.name == "driverEncodeData");
     const bool record_audio = (it.name == "rawAudioData") && Params().getBool("RecordAudio");
     if (it.should_log || (encoder && !livestream_encoder && (!parking_dashcam || parking_encoder)) || record_audio) {
       LOGD("logging %s", it.name.c_str());
@@ -263,11 +263,14 @@ void loggerd_thread() {
   std::map<std::string, EncoderInfo> encoder_infos_dict;
   std::vector<RemoteEncoder*> encoders_with_audio;
   for (const auto &cam : cameras_logged) {
-    if (parking_dashcam && cam.stream_type != VISION_STREAM_ROAD) {
+    if (parking_dashcam && cam.stream_type == VISION_STREAM_WIDE_ROAD) {
       continue;
     }
     for (const auto &encoder_info : cam.encoder_infos) {
       encoder_infos_dict[encoder_info.publish_name] = encoder_info;
+      if (parking_dashcam && cam.stream_type == VISION_STREAM_DRIVER) {
+        encoder_infos_dict[encoder_info.publish_name].record = true;
+      }
       s.max_waiting++;
     }
   }
