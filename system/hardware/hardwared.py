@@ -356,6 +356,7 @@ def hardware_thread(end_event, hw_queue) -> None:
     parking_dashcam_active, parking_dashcam_session_blocked = update_parking_dashcam_state(
       parking_dashcam_enabled,
       onroad_conditions["ignition"],
+      in_car,
       power_monitor.get_car_voltage() if voltage is not None else None,
       now - ignition_off_ts if ignition_off_ts is not None else 0.,
       thermal_status < ThermalStatus.critical,

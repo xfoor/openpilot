@@ -202,25 +202,26 @@ class TestPowerMonitoring:
 
 
 def test_parking_dashcam_policy():
-  assert parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
-  assert not parking_dashcam_should_run(False, False, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
-  assert not parking_dashcam_should_run(True, True, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
-  assert not parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV - 1, 0., True)
-  assert not parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV,
+  assert parking_dashcam_should_run(True, False, True, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
+  assert not parking_dashcam_should_run(False, False, True, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
+  assert not parking_dashcam_should_run(True, True, True, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
+  assert not parking_dashcam_should_run(True, False, False, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
+  assert not parking_dashcam_should_run(True, False, True, PARKING_DASHCAM_MIN_VOLTAGE_MV - 1, 0., True)
+  assert not parking_dashcam_should_run(True, False, True, PARKING_DASHCAM_MIN_VOLTAGE_MV,
                                         PARKING_DASHCAM_MAX_TIME_S, True)
-  assert not parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., False)
+  assert not parking_dashcam_should_run(True, False, True, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., False)
 
 
 def test_parking_dashcam_cutoff_latches_until_ignition():
   voltage = PARKING_DASHCAM_MIN_VOLTAGE_MV
-  active, blocked = update_parking_dashcam_state(True, False, voltage, 0., True, False, False)
+  active, blocked = update_parking_dashcam_state(True, False, True, voltage, 0., True, False, False)
   assert active and not blocked
 
-  active, blocked = update_parking_dashcam_state(True, False, voltage - 1, 1., True, active, blocked)
+  active, blocked = update_parking_dashcam_state(True, False, True, voltage - 1, 1., True, active, blocked)
   assert not active and blocked
 
-  active, blocked = update_parking_dashcam_state(True, False, voltage, 2., True, active, blocked)
+  active, blocked = update_parking_dashcam_state(True, False, True, voltage, 2., True, active, blocked)
   assert not active and blocked
 
-  active, blocked = update_parking_dashcam_state(True, True, voltage, 0., True, active, blocked)
+  active, blocked = update_parking_dashcam_state(True, True, True, voltage, 0., True, active, blocked)
   assert not active and not blocked

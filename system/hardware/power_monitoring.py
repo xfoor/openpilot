@@ -22,11 +22,12 @@ PARKING_DASHCAM_MAX_TIME_S = 60 * 60
 PARKING_DASHCAM_MIN_VOLTAGE_MV = int(VBATT_PAUSE_CHARGING * 1e3)
 
 
-def parking_dashcam_should_run(enabled: bool, ignition: bool, car_voltage_mV: float | None,
+def parking_dashcam_should_run(enabled: bool, ignition: bool, in_car: bool, car_voltage_mV: float | None,
                                offroad_time_s: float, thermal_ok: bool) -> bool:
   return (
     enabled
     and not ignition
+    and in_car
     and car_voltage_mV is not None
     and car_voltage_mV >= PARKING_DASHCAM_MIN_VOLTAGE_MV
     and 0 <= offroad_time_s < PARKING_DASHCAM_MAX_TIME_S
@@ -34,10 +35,10 @@ def parking_dashcam_should_run(enabled: bool, ignition: bool, car_voltage_mV: fl
   )
 
 
-def update_parking_dashcam_state(enabled: bool, ignition: bool, car_voltage_mV: float | None,
+def update_parking_dashcam_state(enabled: bool, ignition: bool, in_car: bool, car_voltage_mV: float | None,
                                  offroad_time_s: float, thermal_ok: bool, active: bool,
                                  session_blocked: bool) -> tuple[bool, bool]:
-  eligible = parking_dashcam_should_run(enabled, ignition, car_voltage_mV, offroad_time_s, thermal_ok)
+  eligible = parking_dashcam_should_run(enabled, ignition, in_car, car_voltage_mV, offroad_time_s, thermal_ok)
   if ignition:
     session_blocked = False
   elif active and enabled and not eligible:
