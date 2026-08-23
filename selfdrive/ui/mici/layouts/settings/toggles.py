@@ -34,6 +34,7 @@ class TogglesLayoutMici(NavScroller):
     road_perception_junction_toggle = BigParamControl(tr("Junction vehicle voice alerts"), "RoadPerceptionJunctionEnabled")
     speed_limit_toggle = BigParamControl(tr("Speed limit sign detection (beta)"), "RoadSpeedLimitEnabled")
     speed_limit_voice_toggle = BigParamControl(tr("Speed limit voice alerts"), "RoadSpeedLimitVoiceEnabled")
+    parking_dashcam_toggle = BigParamControl(tr("Record while parked"), "ParkingDashcamEnabled")
     record_front = BigParamControl("record & upload driver camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
@@ -59,6 +60,7 @@ class TogglesLayoutMici(NavScroller):
       road_perception_junction_toggle,
       speed_limit_toggle,
       speed_limit_voice_toggle,
+      parking_dashcam_toggle,
       record_front,
       record_mic,
       enable_openpilot,
@@ -85,6 +87,7 @@ class TogglesLayoutMici(NavScroller):
       ("RoadPerceptionJunctionEnabled", road_perception_junction_toggle),
       ("RoadSpeedLimitEnabled", speed_limit_toggle),
       ("RoadSpeedLimitVoiceEnabled", speed_limit_voice_toggle),
+      ("ParkingDashcamEnabled", parking_dashcam_toggle),
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),

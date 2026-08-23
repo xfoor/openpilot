@@ -18,6 +18,33 @@ MIN_ON_TIME_S = 3600
 DELAY_SHUTDOWN_TIME_S = 300 # Wait at least DELAY_SHUTDOWN_TIME_S seconds after offroad_time to shutdown.
 VOLTAGE_SHUTDOWN_MIN_OFFROAD_TIME_S = 60
 
+PARKING_DASHCAM_MAX_TIME_S = 60 * 60
+PARKING_DASHCAM_MIN_VOLTAGE_MV = int(VBATT_PAUSE_CHARGING * 1e3)
+
+
+def parking_dashcam_should_run(enabled: bool, ignition: bool, car_voltage_mV: float | None,
+                               offroad_time_s: float, thermal_ok: bool) -> bool:
+  return (
+    enabled
+    and not ignition
+    and car_voltage_mV is not None
+    and car_voltage_mV >= PARKING_DASHCAM_MIN_VOLTAGE_MV
+    and 0 <= offroad_time_s < PARKING_DASHCAM_MAX_TIME_S
+    and thermal_ok
+  )
+
+
+def update_parking_dashcam_state(enabled: bool, ignition: bool, car_voltage_mV: float | None,
+                                 offroad_time_s: float, thermal_ok: bool, active: bool,
+                                 session_blocked: bool) -> tuple[bool, bool]:
+  eligible = parking_dashcam_should_run(enabled, ignition, car_voltage_mV, offroad_time_s, thermal_ok)
+  if ignition:
+    session_blocked = False
+  elif active and enabled and not eligible:
+    session_blocked = True
+  return eligible and not session_blocked, session_blocked
+
+
 class PowerMonitoring:
   def __init__(self):
     self.params = Params()
@@ -103,6 +130,9 @@ class PowerMonitoring:
 
   def get_car_battery_capacity(self) -> int:
     return int(self.car_battery_capacity_uWh)
+
+  def get_car_voltage(self) -> float:
+    return self.car_voltage_mV
 
   # See if we need to shutdown
   def should_shutdown(self, ignition: bool, in_car: bool, offroad_timestamp: float | None, started_seen: bool):

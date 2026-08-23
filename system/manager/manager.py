@@ -126,6 +126,7 @@ def manager_thread() -> None:
 
   started_prev = False
   ignition_prev = False
+  recording_mode_prev = "offroad"
 
   while True:
     sm.update(1000)
@@ -141,12 +142,20 @@ def manager_thread() -> None:
     if ignition and not ignition_prev:
       params.clear_all(ParamKeyFlag.CLEAR_ON_IGNITION_ON)
 
+    parking_dashcam_active = params.get_bool("ParkingDashcamActive")
+    recording_mode = "onroad" if started else ("parking" if parking_dashcam_active else "offroad")
+    if recording_mode != recording_mode_prev and recording_mode != "offroad" and recording_mode_prev != "offroad":
+      # Close the old route and encoder before switching between full and road-only recording.
+      managed_processes["loggerd"].stop()
+      managed_processes["encoderd"].stop()
+
     # update onroad params, which drives pandad's safety setter thread
     if started != started_prev:
       write_onroad_params(started, params)
 
     started_prev = started
     ignition_prev = ignition
+    recording_mode_prev = recording_mode
 
     ensure_running(managed_processes.values(), started, params=params, CP=sm['carParams'], not_run=ignore)
 

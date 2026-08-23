@@ -21,7 +21,7 @@ from openpilot.system.hardware import HARDWARE, TICI, AGNOS, PC
 from openpilot.system.loggerd.config import get_available_percent
 from openpilot.system.statsd import statlog
 from openpilot.common.swaglog import cloudlog
-from openpilot.system.hardware.power_monitoring import PowerMonitoring
+from openpilot.system.hardware.power_monitoring import PowerMonitoring, update_parking_dashcam_state
 from openpilot.system.hardware.fan_controller import FanController
 from openpilot.system.version import terms_version, training_version
 from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
@@ -167,6 +167,8 @@ def hardware_thread(end_event, hw_queue) -> None:
   started_ts: float | None = None
   started_seen = False
   startup_blocked_ts: float | None = None
+  ignition_off_ts: float | None = None
+  parking_dashcam_session_blocked = False
   thermal_status = ThermalStatus.ok
 
   last_hw_state = HardwareState(
@@ -183,10 +185,12 @@ def hardware_thread(end_event, hw_queue) -> None:
   should_start_prev = False
   in_car = False
   engaged_prev = False
+  parking_dashcam_active_prev = False
   pwrsave = False
   offroad_cycle_count = 0
 
   params = Params()
+  params.put_bool("ParkingDashcamActive", False, block=True)
   power_monitor = PowerMonitoring()
 
   uptime_offroad: float = params.get("UptimeOffroad", return_default=True)
@@ -223,6 +227,12 @@ def hardware_thread(end_event, hw_queue) -> None:
       if onroad_conditions["ignition"]:
         onroad_conditions["ignition"] = False
         cloudlog.error("panda timed out onroad")
+
+    now = time.monotonic()
+    if onroad_conditions["ignition"]:
+      ignition_off_ts = None
+    elif ignition_off_ts is None:
+      ignition_off_ts = now
 
     # Run at 2Hz, plus either edge of ignition
     ign_edge = (started_ts is not None) != all(onroad_conditions.values())
@@ -339,7 +349,32 @@ def hardware_thread(end_event, hw_queue) -> None:
       except Exception:
         pass
 
-    should_pwrsave = not onroad_conditions["ignition"] and msg.deviceState.screenBrightnessPercent < 1e-3
+    voltage = None if peripheralState.pandaType == log.PandaState.PandaType.unknown else peripheralState.voltage
+    power_monitor.calculate(voltage, onroad_conditions["ignition"])
+
+    parking_dashcam_enabled = params.get_bool("ParkingDashcamEnabled")
+    parking_dashcam_active, parking_dashcam_session_blocked = update_parking_dashcam_state(
+      parking_dashcam_enabled,
+      onroad_conditions["ignition"],
+      power_monitor.get_car_voltage() if voltage is not None else None,
+      now - ignition_off_ts if ignition_off_ts is not None else 0.,
+      thermal_status < ThermalStatus.critical,
+      parking_dashcam_active_prev,
+      parking_dashcam_session_blocked,
+    )
+    if parking_dashcam_active != parking_dashcam_active_prev:
+      params.put_bool("ParkingDashcamActive", parking_dashcam_active, block=True)
+      cloudlog.event(
+        "parking dashcam state",
+        active=parking_dashcam_active,
+        car_voltage_mV=power_monitor.get_car_voltage(),
+        session_blocked=parking_dashcam_session_blocked,
+      )
+      parking_dashcam_active_prev = parking_dashcam_active
+
+    should_pwrsave = (not onroad_conditions["ignition"]
+                      and not parking_dashcam_active
+                      and msg.deviceState.screenBrightnessPercent < 1e-3)
     if should_pwrsave != pwrsave or (count == 0):
       HARDWARE.set_power_save(should_pwrsave)
     pwrsave = should_pwrsave
@@ -365,8 +400,6 @@ def hardware_thread(end_event, hw_queue) -> None:
         off_ts = time.monotonic()
 
     # Offroad power monitoring
-    voltage = None if peripheralState.pandaType == log.PandaState.PandaType.unknown else peripheralState.voltage
-    power_monitor.calculate(voltage, onroad_conditions["ignition"])
     msg.deviceState.offroadPowerUsageUwh = power_monitor.get_power_used()
     msg.deviceState.carBatteryCapacityUwh = max(0, power_monitor.get_car_battery_capacity())
     current_power_draw = HARDWARE.get_current_power_draw()

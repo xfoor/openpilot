@@ -2,7 +2,9 @@ import pytest
 
 from openpilot.common.params import Params
 from openpilot.system.hardware.power_monitoring import PowerMonitoring, CAR_BATTERY_CAPACITY_uWh, \
-                                                CAR_CHARGING_RATE_W, VBATT_PAUSE_CHARGING, DELAY_SHUTDOWN_TIME_S
+                                                CAR_CHARGING_RATE_W, VBATT_PAUSE_CHARGING, DELAY_SHUTDOWN_TIME_S, \
+                                                PARKING_DASHCAM_MAX_TIME_S, PARKING_DASHCAM_MIN_VOLTAGE_MV, \
+                                                parking_dashcam_should_run, update_parking_dashcam_state
 
 # Create fake time
 ssb = 0.
@@ -197,3 +199,28 @@ class TestPowerMonitoring:
                                        offroad_timestamp,
                                        started_seen), \
                     f"Should shutdown after {DELAY_SHUTDOWN_TIME_S} seconds offroad time"
+
+
+def test_parking_dashcam_policy():
+  assert parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
+  assert not parking_dashcam_should_run(False, False, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
+  assert not parking_dashcam_should_run(True, True, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., True)
+  assert not parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV - 1, 0., True)
+  assert not parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV,
+                                        PARKING_DASHCAM_MAX_TIME_S, True)
+  assert not parking_dashcam_should_run(True, False, PARKING_DASHCAM_MIN_VOLTAGE_MV, 0., False)
+
+
+def test_parking_dashcam_cutoff_latches_until_ignition():
+  voltage = PARKING_DASHCAM_MIN_VOLTAGE_MV
+  active, blocked = update_parking_dashcam_state(True, False, voltage, 0., True, False, False)
+  assert active and not blocked
+
+  active, blocked = update_parking_dashcam_state(True, False, voltage - 1, 1., True, active, blocked)
+  assert not active and blocked
+
+  active, blocked = update_parking_dashcam_state(True, False, voltage, 2., True, active, blocked)
+  assert not active and blocked
+
+  active, blocked = update_parking_dashcam_state(True, True, voltage, 0., True, active, blocked)
+  assert not active and not blocked

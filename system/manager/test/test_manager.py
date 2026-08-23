@@ -7,7 +7,7 @@ from cereal import car
 from openpilot.common.params import Params
 import openpilot.system.manager.manager as manager
 from openpilot.system.manager.process import ensure_running
-from openpilot.system.manager.process_config import managed_processes, procs
+from openpilot.system.manager.process_config import logging, managed_processes, procs, recording, recording_camera
 from openpilot.system.hardware import HARDWARE
 
 os.environ['FAKEUPLOAD'] = "1"
@@ -50,6 +50,26 @@ class TestManager:
         assert params.get(k) == default_value
     assert params.get("OpenpilotEnabledToggle")
     assert params.get("RouteCount") == 0
+
+  def test_parking_dashcam_process_selection(self):
+    class StubParams:
+      parking_active = False
+
+      def get_bool(self, key):
+        assert key in ("DisableLogging", "IsDriverViewEnabled", "ParkingDashcamActive")
+        return self.parking_active if key == "ParkingDashcamActive" else False
+
+    params = StubParams()
+    CP = car.CarParams.new_message()
+
+    assert not logging(False, params, CP)
+    assert not recording(False, params, CP)
+    assert not recording_camera(False, params, CP)
+
+    params.parking_active = True
+    assert logging(False, params, CP)
+    assert recording(False, params, CP)
+    assert recording_camera(False, params, CP)
 
   @pytest.mark.skip("this test is flaky the way it's currently written, should be moved to test_onroad")
   def test_clean_exit(self, subtests):
